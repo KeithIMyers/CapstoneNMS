@@ -1,15 +1,24 @@
 <x-filament-panels::page>
-    @php $s = $this->getStatus(); @endphp
+    @php
+        $s = $this->getStatus();
+        // Resolve Alpine seed values PHP-side. Blade's @json directive
+        // miscounts nested brackets when fed expressions like
+        // `in_array(($a['b'] ?? null), ['x','y'])`, which threw
+        // "Unclosed '[' does not match ')'" on first render — so we
+        // pre-compute and emit JSON literals.
+        $progressInitial = $s['progress'] ?? null;
+        $progressVisibleInitial = in_array(($progressInitial['status'] ?? null), ['running', 'complete', 'failed'], true);
+        $progressEndpoint = route('updater.progress');
+    @endphp
 
     {{-- Live progress card. Hidden until either a poll detects an
          in-flight apply (status=running) OR the page receives the
          `updater-started` Livewire event from applyManifest()/
-         applyUpload(). Hits {{ route('updater.progress') }} every
-         1.2s while running; stops + redirects on complete/failed. --}}
+         applyUpload(). Stops + redirects on complete/failed. --}}
     <div
         x-data="{
-            visible: @json(in_array(($s['progress']['status'] ?? null), ['running', 'complete', 'failed'], true)),
-            state: @json($s['progress'] ?? null),
+            visible: {{ $progressVisibleInitial ? 'true' : 'false' }},
+            state: {!! json_encode($progressInitial, JSON_UNESCAPED_SLASHES) !!},
             poll: null,
             start() {
                 this.visible = true;
@@ -22,7 +31,7 @@
             },
             async tick() {
                 try {
-                    const r = await fetch('{{ route('updater.progress') }}', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                    const r = await fetch('{{ $progressEndpoint }}', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
                     if (! r.ok) return;
                     const j = await r.json();
                     this.state = j;
