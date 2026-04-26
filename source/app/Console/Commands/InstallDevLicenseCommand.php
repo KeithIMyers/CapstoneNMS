@@ -83,10 +83,36 @@ class InstallDevLicenseCommand extends Command
             'expires_at'              => Carbon::now()->addDays($days)->toIso8601String(),
         ];
 
-        // Phase B: this becomes "<base64(json)>.<base64(ed25519_sign(json))>".
-        // Phase A: plain JSON. The runtime parser already accepts
-        // either form, so the upgrade is signature-only.
-        $envelope = json_encode($payload, JSON_PRETTY_PRINT);
+        // Locate the keygen private key. It lives outside source/ so
+        // we look up two directories from base_path. Refuse to mint
+        // when the key is missing — without a valid signature the
+        // runtime verifier rejects the file, and that's what we want.
+        $privPath = (string) env(
+            'CAPSTONE_KEYGEN_PRIVATE_KEY',
+            dirname(base_path()) . '/keygen/keys/private.key',
+        );
+        if (! is_file($privPath)) {
+            $this->error('Keygen private key not found at '.$privPath.'.');
+            $this->line('');
+            $this->line('Run the keygen bootstrap once from the repo root:');
+            $this->line('  cd ../keygen && composer install && ./bin/keygen bootstrap');
+            $this->line('Then paste the printed public key into source/config/capstone.php.');
+            return self::FAILURE;
+        }
+        $secret = (string) file_get_contents($privPath);
+        if (strlen($secret) !== SODIUM_CRYPTO_SIGN_SECRETKEYBYTES) {
+            $this->error('Private key looks malformed (wrong byte length).');
+            return self::FAILURE;
+        }
+
+        // Sort keys recursively so the runtime + the keygen + this
+        // command all sign the same canonical bytes for the same
+        // logical payload. Keep this transformation in lockstep with
+        // CapstoneNMS\Keygen\Crypto\Signer::encodeJson.
+        $canonical = $this->canonicalize($payload);
+        $json = (string) json_encode($canonical, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $sig = sodium_crypto_sign_detached($json, $secret);
+        $envelope = $this->b64url($json) . '.' . $this->b64url($sig);
 
         $disk = Storage::disk('local');
         $disk->put(LicenseService::STORAGE_PATH, $envelope);
@@ -105,5 +131,19 @@ class InstallDevLicenseCommand extends Command
         $this->line('The dev banner will appear on every page until the license expires or you replace it with a kind=production license.');
 
         return self::SUCCESS;
+    }
+
+    private function canonicalize(array $arr): array
+    {
+        ksort($arr);
+        foreach ($arr as $k => $v) {
+            if (is_array($v)) $arr[$k] = $this->canonicalize($v);
+        }
+        return $arr;
+    }
+
+    private function b64url(string $bytes): string
+    {
+        return rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=');
     }
 }

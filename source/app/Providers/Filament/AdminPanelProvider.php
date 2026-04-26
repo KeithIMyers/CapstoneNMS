@@ -92,6 +92,7 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
                 VerifyTwoFactor::class,
+                \App\Http\Middleware\EnforceLicense::class,
             ])
             // Top-of-panel dev banner. Same trigger conditions as the
             // public-side partial (license missing OR kind != production)

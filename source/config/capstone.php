@@ -32,7 +32,7 @@ return [
     | bootstrap`. Until then, the runtime treats every install as
     | unlicensed (see LicenseService::DEV_FALLBACK_TIER).
     */
-    'license_public_key_b64' => env('CAPSTONE_LICENSE_PUBLIC_KEY', ''),
+    'license_public_key_b64' => env('CAPSTONE_LICENSE_PUBLIC_KEY', 'Z0nQaB0y4SdTN3ebPoEBGK65feVmD4KIq7c8JGFhfuA'),
 
     /*
     |---------------------------------------------------------------

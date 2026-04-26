@@ -111,7 +111,80 @@ class User extends Authenticatable implements FilamentUser
             if (empty($user->slug) && ! empty($user->name)) {
                 $user->slug = self::uniqueSlug($user->name, $user->id);
             }
+
+            // License-tier headcount enforcement. Runs on every save
+            // (creates AND role/agent flips) so a Filament edit that
+            // promotes someone past the cap is rejected with the
+            // same error path as a CLI insert.
+            if ($user->exists && ! $user->isDirty(['role', 'is_agent'])) {
+                return; // not a role / agent change, skip
+            }
+            self::guardLicenseCaps($user);
         });
+    }
+
+    /**
+     * @throws \App\Services\Licensing\LicenseCapException
+     */
+    private static function guardLicenseCaps(self $user): void
+    {
+        $license = app(\App\Services\Licensing\LicenseService::class);
+
+        // Ghost agents are gated on the agents cap.
+        if ($user->is_agent) {
+            $cap = $license->limit('agents');
+            if ($cap === null) return; // license missing; EnforceLicense will catch the request
+            if ($cap >= 0) {
+                $current = self::query()->where('is_agent', true)
+                    ->when($user->exists, fn ($q) => $q->where('id', '!=', $user->id))
+                    ->count();
+                if ($current >= $cap) {
+                    throw new \App\Services\Licensing\LicenseCapException(
+                        'agents', $cap, $current,
+                        "Your CapstoneNMS license permits {$cap} ghost-agent accounts; you already have {$current}.",
+                    );
+                }
+            }
+            return;
+        }
+
+        // Real users — bucket by role. Admin / sub_admin share the
+        // 'admins' cap; editor maps to 'editors'; author maps to
+        // 'authors'. Anything else (e.g. 'user' for public reader
+        // accounts) is unlimited.
+        $role = strtolower((string) $user->role);
+        $bucket = match ($role) {
+            'admin', 'sub_admin' => 'admins',
+            'editor'             => 'editors',
+            'author'             => 'authors',
+            default              => null,
+        };
+        if ($bucket === null) return;
+
+        $cap = $license->limit($bucket);
+        if ($cap === null) return;
+        if ($cap < 0) return; // unlimited
+
+        $bucketRoles = match ($bucket) {
+            'admins'  => ['admin', 'sub_admin'],
+            'editors' => ['editor'],
+            'authors' => ['author'],
+        };
+
+        $current = self::query()
+            ->whereIn('role', $bucketRoles)
+            ->where(function ($q) {
+                $q->where('is_agent', false)->orWhereNull('is_agent');
+            })
+            ->when($user->exists, fn ($q) => $q->where('id', '!=', $user->id))
+            ->count();
+
+        if ($current >= $cap) {
+            throw new \App\Services\Licensing\LicenseCapException(
+                $bucket, $cap, $current,
+                "Your CapstoneNMS license permits {$cap} {$bucket}; you already have {$current}.",
+            );
+        }
     }
 
     private static function uniqueSlug(string $name, ?int $ignoreId = null): string

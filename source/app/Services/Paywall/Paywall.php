@@ -24,6 +24,15 @@ class Paywall
     {
         if (! $article->is_premium) return true;
 
+        // License gate: paywall is a Pro / Enterprise feature. On
+        // tiers without it the article is served full-bodied — the
+        // editorial team can still flag premium content but the
+        // gate doesn't enforce. The Site Settings → Paywall tab is
+        // also hidden in the License page UI for those tiers.
+        if (! app(\App\Services\Licensing\LicenseService::class)->feature('paywall')) {
+            return true;
+        }
+
         $user = auth()->user();
         if ($user) {
             // Internal users always see full content.

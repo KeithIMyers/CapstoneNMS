@@ -27,6 +27,13 @@ class ArticlePurchaseController extends Controller
 {
     public function checkout(Request $request, News $news)
     {
+        // License feature gate: paywall + pay-per-article are Pro /
+        // Enterprise only. On lower tiers the route stays registered
+        // but refuses up front so editorial flagging still works
+        // without billing fully wiring up.
+        if (! app(\App\Services\Licensing\LicenseService::class)->feature('paywall')) {
+            return redirect()->route('news.details', ['slug' => $news->slug]);
+        }
         if (! $this->isEnabled()) {
             Session::flash('error_flash_message', 'Single-article purchases aren\'t available right now.');
             return redirect()->route('news.details', ['slug' => $news->slug]);

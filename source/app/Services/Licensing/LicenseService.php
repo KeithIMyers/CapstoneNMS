@@ -168,32 +168,55 @@ class LicenseService
     }
 
     /**
-     * Parse the envelope. Phase A: accept either raw JSON or a
-     * "<base64-json>.<base64-sig>" wire format; the signature half is
-     * not verified yet. Phase B's verifier replaces this method body
-     * with a real Ed25519 check before unmarshal.
+     * Verify an envelope's Ed25519 signature against the embedded
+     * product public key, then return the decoded payload. Returns
+     * null on any failure (bad format, bad signature, malformed JSON,
+     * missing or malformed public key).
+     *
+     * Constant-time at the libsodium level — a pirate can't time
+     * their way to a forged signature even if they could brute-force
+     * the parser.
      */
     private function parseEnvelope(string $raw): ?array
     {
         $raw = trim($raw);
-        if ($raw === '') return null;
+        if ($raw === '' || ! str_contains($raw, '.')) return null;
 
-        // Wire format: "<b64payload>.<b64sig>"
-        if (str_contains($raw, '.')) {
-            [$b64payload] = explode('.', $raw, 2);
-            $json = $this->base64UrlDecode($b64payload);
-        } else {
-            $json = $raw;
+        $publicKey = $this->publicKey();
+        if ($publicKey === null) {
+            Log::error('LicenseService: license_public_key_b64 is not configured. Refusing to validate.');
+            return null;
         }
+
+        [$b64payload, $b64sig] = explode('.', $raw, 2);
+        $json = $this->base64UrlDecode($b64payload);
+        $sig  = $this->base64UrlDecode($b64sig);
+        if ($json === '' || $sig === '' || strlen($sig) !== SODIUM_CRYPTO_SIGN_BYTES) return null;
+
+        try {
+            $ok = sodium_crypto_sign_verify_detached($sig, $json, $publicKey);
+        } catch (\SodiumException $e) {
+            return null;
+        }
+        if (! $ok) return null;
 
         $data = json_decode($json, true);
         return is_array($data) ? $data : null;
     }
 
+    private function publicKey(): ?string
+    {
+        $b64 = (string) config('capstone.license_public_key_b64', '');
+        if ($b64 === '') return null;
+        $raw = $this->base64UrlDecode($b64);
+        return strlen($raw) === SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES ? $raw : null;
+    }
+
     private function base64UrlDecode(string $s): string
     {
         $pad = (4 - strlen($s) % 4) % 4;
-        return (string) base64_decode(strtr($s, '-_', '+/').str_repeat('=', $pad));
+        $out = base64_decode(strtr($s, '-_', '+/').str_repeat('=', $pad), true);
+        return $out === false ? '' : $out;
     }
 
     public function isValid(): bool
