@@ -55,5 +55,69 @@ else
   echo "    Run: cd keygen && composer install && ./bin/keygen bootstrap"
 fi
 
+# Generate a signed update manifest fragment. This is the same wire
+# format the runtime UpdateService::fetchManifest() expects from
+# https://update.capstonenms.com/manifest.json — a single-release
+# manifest you can publish as-is, or merge into a larger
+# multi-release manifest at the CDN.
+#
+# Release notes can be passed via the CHANGELOG_FILE env var. If
+# unset, falls back to the first paragraph of CHANGELOG.md (when
+# present) or a generic note.
+if [ -f "${KEY}" ]; then
+  echo "==> Generating signed update manifest"
+
+  NOTES_PATH="${CHANGELOG_FILE:-${ROOT}/CHANGELOG.md}"
+  NOTES=""
+  if [ -f "${NOTES_PATH}" ]; then
+    # Pull the first paragraph until the first blank line so the
+    # manifest stays small. Customers see this in the Updates UI.
+    NOTES="$(awk 'BEGIN{p=0} /^$/{if(p) exit} /./{p=1; print}' "${NOTES_PATH}")"
+  fi
+  [ -z "${NOTES}" ] && NOTES="CapstoneNMS ${VERSION} release."
+
+  CHECKSUM="$(awk '{print $1}' "${ARCHIVE}.sha256")"
+  ARCHIVE_NAME="$(basename "${ARCHIVE}")"
+  MANIFEST_OUT="${DIST}/manifest.json"
+
+  php -r '
+    [$_, $version, $archiveName, $checksum, $notes, $keyPath, $manifestOut] = $argv;
+    $payload = [
+        "v"        => 1,
+        "latest"   => $version,
+        "releases" => [
+            [
+                "version"         => $version,
+                "url"             => "https://update.capstonenms.com/" . $archiveName,
+                "sig_url"         => "https://update.capstonenms.com/" . $archiveName . ".sig",
+                "checksum_sha256" => $checksum,
+                "min_php"         => "8.3",
+                "released_at"     => gmdate("c"),
+                "notes"           => $notes,
+            ],
+        ],
+    ];
+    // Canonical JSON (recursive ksort) so a re-signed identical
+    // payload produces byte-identical bytes — matches the keygen.
+    $canonicalize = function (array $a) use (&$canonicalize): array {
+        ksort($a);
+        foreach ($a as $k => $v) if (is_array($v)) $a[$k] = $canonicalize($v);
+        return $a;
+    };
+    $json = json_encode($canonicalize($payload), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+    $secret = file_get_contents($keyPath);
+    if (strlen($secret) !== SODIUM_CRYPTO_SIGN_SECRETKEYBYTES) {
+        fwrite(STDERR, "Private key wrong length\n"); exit(1);
+    }
+    $sig = sodium_crypto_sign_detached($json, $secret);
+
+    $b64 = fn (string $s) => rtrim(strtr(base64_encode($s), "+/", "-_"), "=");
+    $envelope = $b64($json) . "." . $b64($sig);
+    file_put_contents($manifestOut, $envelope);
+    echo "  manifest written: " . basename($manifestOut) . " (" . strlen($envelope) . " bytes)\n";
+  ' "${VERSION}" "${ARCHIVE_NAME}" "${CHECKSUM}" "${NOTES}" "${KEY}" "${MANIFEST_OUT}"
+fi
+
 echo "==> dist/ artifacts:"
 ls -la "${DIST}"
