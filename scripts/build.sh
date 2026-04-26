@@ -53,8 +53,18 @@ if [ -f "${BUILD}/app/Console/Commands/InstallDevLicenseCommand.php" ]; then
 fi
 
 echo "==> composer install --no-dev"
-( cd "${BUILD}" && composer install --no-dev --optimize-autoloader --no-interaction --quiet )
+# Build dev boxes that lack the runtime extensions (ext-gd /
+# ext-imagick are typically installed via the OS package manager
+# with sudo) can still produce a correct vendor/ — composer just
+# wants to verify the platform; the resulting tree is identical.
+( cd "${BUILD}" && composer install --no-dev --optimize-autoloader --no-interaction --quiet \
+    --ignore-platform-req=ext-gd --ignore-platform-req=ext-imagick )
 
+if ! command -v npm >/dev/null 2>&1; then
+  echo "FATAL: npm not on PATH. The Vite build is part of the dist." >&2
+  echo "       Install Node + npm locally (NVM is the simplest path)." >&2
+  exit 1
+fi
 echo "==> npm install + build (frontend assets)"
 ( cd "${BUILD}" && npm install --silent && npm run build --silent )
 

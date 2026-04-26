@@ -37,7 +37,7 @@ DIST="${ROOT}/dist"
 
 REMOTE_USER="${DEPLOY_UPDATE_USER:-capstone}"
 REMOTE_HOST="${DEPLOY_UPDATE_HOST:-64.20.40.243}"
-REMOTE_PATH="${DEPLOY_UPDATE_PATH:-/domains/update.capstonenms.com/public_html/}"
+REMOTE_PATH="${DEPLOY_UPDATE_PATH:-domains/update.capstonenms.com/public_html/}"
 SSH_PORT="${DEPLOY_UPDATE_PORT:-22}"
 EXTRA_FLAGS="${DEPLOY_RSYNC_FLAGS:-}"
 
