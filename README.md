@@ -61,14 +61,23 @@ php artisan serve
 ## Building a release
 
 ```bash
-./scripts/build.sh                  # composer + npm + protections
-./scripts/dist.sh                   # zip + checksum + signature
-./scripts/docs.sh                   # render version into customer docs
+./scripts/release.sh 1.0.0          # build + dist + deploy in one
+# OR step by step:
+./scripts/build.sh   1.0.0          # composer + npm + protections
+./scripts/dist.sh    1.0.0          # zip + checksum + signature + manifest
+./scripts/deploy.sh                 # rsync dist/ → update.capstonenms.com
+./scripts/docs.sh    1.0.0          # render version into customer docs
+
 ls dist/
-# capstone-nms-1.0.0-dev.zip
-# capstone-nms-1.0.0-dev.zip.sha256
-# capstone-nms-1.0.0-dev.zip.sig    (Phase D)
+# capstone-nms-1.0.0.zip
+# capstone-nms-1.0.0.zip.sha256
+# capstone-nms-1.0.0.zip.sig
+# manifest.json
 ```
+
+`scripts/release.sh 1.0.0 --dry-run` builds + bundles locally without deploying — useful for inspecting the artifact before pushing to the CDN.
+
+The deploy step rsyncs to `capstone@64.20.40.243:/domains/update.capstonenms.com/public_html/` over SSH (key auth). Override via `DEPLOY_UPDATE_USER` / `DEPLOY_UPDATE_HOST` / `DEPLOY_UPDATE_PATH` / `DEPLOY_UPDATE_PORT` env vars. Pre-flight verifies the manifest signature against the embedded product key before pushing — a mis-signed manifest on the CDN would cause every customer's UpdateService to reject the update.
 
 ## Minting a license
 
