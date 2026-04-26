@@ -44,9 +44,17 @@ APP_DIR=""              # for standard: ~/capstone-nms; for shared: <doc-root>/_
 ASSUME_YES=0
 NONINTERACTIVE=0
 
-# stdin isn't a tty when piping curl|bash — fall back to non-interactive.
+# When piped via `curl | bash` stdin is the curl pipe, not the terminal,
+# so `read` blocks forever. Reopen stdin from /dev/tty when available so
+# prompts work in both `curl | bash` and `bash install.sh` flows. If
+# /dev/tty isn't available (cron, container without a controlling tty)
+# we fall back to non-interactive and require flags.
 if [ ! -t 0 ]; then
-    NONINTERACTIVE=1
+    if [ -r /dev/tty ] && [ -w /dev/tty ]; then
+        exec < /dev/tty
+    else
+        NONINTERACTIVE=1
+    fi
 fi
 
 TMPDIR=""
@@ -145,11 +153,38 @@ if [ -z "${DOC_ROOT}" ]; then
         if [ "${NONINTERACTIVE}" -eq 1 ]; then
             die "Multiple candidate doc roots found; pass --doc-root=… to choose. Candidates: ${candidates[*]}"
         fi
-        echo "Multiple candidate doc roots found:"
-        n=1; for c in "${candidates[@]}"; do echo "  $n) $c"; n=$((n+1)); done
-        printf 'Pick one [1-%d]: ' "${#candidates[@]}"
-        read -r choice
-        DOC_ROOT="${candidates[$((choice - 1))]}"
+        echo ""
+        echo "Found multiple candidate doc roots:"
+        echo ""
+        i=1
+        for c in "${candidates[@]}"; do
+            printf '  %d) %s\n' "$i" "$c"
+            i=$((i+1))
+        done
+        echo "  q) Quit"
+        echo ""
+
+        choice=""
+        while true; do
+            printf 'Pick one [1-%d]: ' "${#candidates[@]}"
+            if ! read -r choice; then
+                die "Could not read selection — re-run with --doc-root=…"
+            fi
+            case "${choice}" in
+                q|Q) die "Aborted by user" ;;
+                ''|*[!0-9]*)
+                    echo "  ! Enter a number between 1 and ${#candidates[@]}, or q to quit."
+                    continue
+                    ;;
+                *)
+                    if [ "${choice}" -ge 1 ] && [ "${choice}" -le "${#candidates[@]}" ]; then
+                        DOC_ROOT="${candidates[$((choice - 1))]}"
+                        break
+                    fi
+                    echo "  ! ${choice} is out of range."
+                    ;;
+            esac
+        done
     fi
 fi
 
