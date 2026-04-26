@@ -58,14 +58,8 @@ echo "==> composer install --no-dev"
 echo "==> npm install + build (frontend assets)"
 ( cd "${BUILD}" && npm install --silent && npm run build --silent )
 
-# Phase E: apply obfuscation + AES encryption on the licensing
-# touch-points before we hand off to dist.sh. For now, flag the
-# files we'll process so the manifest is visible in source review.
-cat > "${BUILD}/_protected_files.txt" <<EOF
-app/Services/Licensing/LicenseService.php
-app/Http/Middleware/EnforceLicense.php
-config/capstone.php
-EOF
+echo "==> Applying source protection pass (scripts/protect.php)"
+php "${ROOT}/scripts/protect.php" "${BUILD}"
 
 echo "==> build/ ready at: ${BUILD}"
 echo "==> Version: ${VERSION}"

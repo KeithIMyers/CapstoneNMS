@@ -24,8 +24,11 @@ CapstoneNMS/
 | Phase | Scope | Status |
 |---|---|---|
 | **A** | Fork + scaffold + rebrand + tier defaults + LicenseService stub | ✅ |
-| **A.1** | Strip `APP_ENV` bypass; license `kind` (production/development/trial); file-based licensing; tightened host check; public + admin dev banner; `license:install-dev` CLI | ✅ this commit |
-| **B** | Ed25519 license mint + verify + tier-cap enforcement on user create / role change + admin License page | pending |
+| **A.1** | Strip `APP_ENV` bypass; license `kind` (production/development/trial); file-based licensing; tightened host check; public + admin dev banner; `license:install-dev` CLI | ✅ |
+| **B** | Ed25519 keygen CLI (bootstrap / mint / verify); runtime verifier; tier-cap enforcement on user save; paywall feature gate; `EnforceLicense` middleware; admin License page | ✅ |
+| **C** | Web installer at `/install` with server-requirements preflight; first-run `.env` + APP_KEY bootstrap; CLI fallback `php artisan capstone:install --interactive` | ✅ |
+| **D** | Web updater: signed manifest pull from `update.capstonenms.com`, signed-zip apply with snapshot/rollback, air-gapped manual upload | ✅ |
+| **E** | Source protection: comment + whitespace strip on the licensing files at build time; release zip signed with the same Ed25519 key | ✅ this commit |
 | **C** | Web installer (`/install`) with server-requirements preflight | pending |
 | **D** | Web updater (CDN manifest + signed-zip apply + rollback) | pending |
 | **E** | Source protection pass on the licensing touchpoints | pending |
