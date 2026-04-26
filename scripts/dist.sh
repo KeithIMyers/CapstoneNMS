@@ -119,5 +119,15 @@ if [ -f "${KEY}" ]; then
   ' "${VERSION}" "${ARCHIVE_NAME}" "${CHECKSUM}" "${NOTES}" "${KEY}" "${MANIFEST_OUT}"
 fi
 
+# Customer-facing SSH bootstrap script. Tracked in
+# scripts/customer/install.sh and copied verbatim — it's manifest-
+# driven, so the same file works release-after-release. Customers
+# fetch it via:  curl -sSL https://update.capstonenms.com/install.sh | bash
+if [ -f "${ROOT}/scripts/customer/install.sh" ]; then
+    cp "${ROOT}/scripts/customer/install.sh" "${DIST}/install.sh"
+    chmod +x "${DIST}/install.sh"
+    echo "==> bundled install.sh"
+fi
+
 echo "==> dist/ artifacts:"
 ls -la "${DIST}"
