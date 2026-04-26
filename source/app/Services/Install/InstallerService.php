@@ -198,20 +198,11 @@ class InstallerService
             return ['ok' => false, 'errors' => ['Migrations failed: '.$e->getMessage()]];
         }
 
-        // 6. Create the first admin.
-        try {
-            \App\Models\User::forceCreate([
-                'name'     => (string) $input['admin_name'],
-                'email'    => (string) $input['admin_email'],
-                'password' => Hash::make((string) $input['admin_password']),
-                'role'     => 'admin',
-                'status'   => 1,
-            ]);
-        } catch (\Throwable $e) {
-            return ['ok' => false, 'errors' => ['Admin creation failed: '.$e->getMessage()]];
-        }
-
-        // 7. Save the license envelope (file upload OR pasted blob).
+        // 6. Save the license envelope FIRST so the User model's
+        //    booted::saving guardLicenseCaps hook can see the active
+        //    license when it gates the first admin create. Without
+        //    this, an unlicensed install treats every cap as 0 and
+        //    refuses to create the bootstrap admin.
         $envelope = trim((string) ($input['license_paste'] ?? ''));
         if ($envelope === '' && ! empty($input['license_file_contents'])) {
             $envelope = trim((string) $input['license_file_contents']);
@@ -223,6 +214,24 @@ class InstallerService
             } catch (\Throwable $e) {
                 return ['ok' => false, 'errors' => ['License save failed: '.$e->getMessage()]];
             }
+        }
+
+        // 7. Create the first admin. Always exempt from the cap
+        //    check itself: we just gated the cap by writing the
+        //    license above; the install is the canonical "first
+        //    admin" path and shouldn't depend on counting subtleties.
+        try {
+            \App\Models\User::withoutEvents(function () use ($input) {
+                \App\Models\User::forceCreate([
+                    'name'     => (string) $input['admin_name'],
+                    'email'    => (string) $input['admin_email'],
+                    'password' => Hash::make((string) $input['admin_password']),
+                    'role'     => 'admin',
+                    'status'   => 1,
+                ]);
+            });
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'errors' => ['Admin creation failed: '.$e->getMessage()]];
         }
 
         // 8. Persist the layout marker so UpdateService knows where
@@ -261,8 +270,16 @@ class InstallerService
         $base = base_path('.env.example');
         $target = base_path('.env');
 
-        $contents = file_exists($base) ? (string) file_get_contents($base) : '';
-        if ($contents === '') {
+        // Use the existing .env as the base when present — preserves
+        // anything the SSH bootstrap wrote (notably APP_KEY) and
+        // doesn't blow away custom-edited values like CACHE_STORE.
+        // Falls back to .env.example for fresh installs, then to a
+        // tiny inline template if .env.example is also missing.
+        if (file_exists($target)) {
+            $contents = (string) file_get_contents($target);
+        } elseif (file_exists($base)) {
+            $contents = (string) file_get_contents($base);
+        } else {
             $contents = "APP_NAME=\nAPP_ENV=production\nAPP_KEY=\nAPP_DEBUG=false\nAPP_URL=\n";
         }
 

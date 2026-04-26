@@ -51,11 +51,11 @@
     <h1>Install CapstoneNMS</h1>
     <p class="lede">Welcome — let's get your site running. This wizard checks your server, configures the database, creates an admin account, and activates your license. About 60 seconds.</p>
 
-    @if (! empty($errors))
+    @if (! empty($installErrors ?? []))
         <div class="card err">
             <strong>The previous attempt couldn't complete:</strong>
             <ul class="errs">
-                @foreach ($errors as $e)
+                @foreach ($installErrors as $e)
                     <li>{{ $e }}</li>
                 @endforeach
             </ul>

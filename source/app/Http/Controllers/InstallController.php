@@ -47,7 +47,11 @@ class InstallController extends Controller
             'preflight'        => $preflight,
             'blockingFailures' => $blockingFailures,
             'old'              => session('_install_old', []),
-            'errors'           => session('_install_errors', []),
+            // Renamed from 'errors' because Laravel's
+            // ShareErrorsFromSession middleware injects $errors as a
+            // ViewErrorBag — our session flash array would be
+            // shadowed and the view would never show install errors.
+            'installErrors'    => session('_install_errors', []),
         ]);
     }
 
