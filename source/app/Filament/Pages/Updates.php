@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Services\Licensing\LicenseService;
+use App\Services\Update\ProgressTracker;
 use App\Services\Update\UpdateService;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -13,19 +14,6 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Storage;
 
-/**
- * Admin Updates page.
- *
- *   Status        current version, latest available, last applied
- *   Check         pulls https://update.capstonenms.com/manifest.json
- *                 (signed) and surfaces the diff
- *   One-click     downloads + verifies + applies the latest release
- *   Air-gapped    upload a zip + .sig pair manually
- *
- * Gated on isUpdateAllowed() — past expiry, the buttons disable and
- * a renewal CTA shows instead. The page itself stays accessible so
- * the customer can see they're behind on updates.
- */
 class Updates extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowDownTray;
@@ -67,7 +55,7 @@ class Updates extends Page
                 ->directory('updates/uploads')
                 ->visibility('private')
                 ->acceptedFileTypes(['application/zip', 'application/octet-stream'])
-                ->maxSize(204800), // 200 MB ceiling per release
+                ->maxSize(204800),
             FileUpload::make('sig')
                 ->label('Detached signature (.sig)')
                 ->disk('local')
@@ -78,6 +66,12 @@ class Updates extends Page
         ]);
     }
 
+    /**
+     * Header actions use closures rather than the string-method
+     * binding form. Filament 4 page header actions don't always
+     * resolve `->action('methodName')` reliably; closures hit the
+     * Livewire invoke path directly.
+     */
     protected function getHeaderActions(): array
     {
         $allowed = app(LicenseService::class)->isUpdateAllowed();
@@ -85,17 +79,17 @@ class Updates extends Page
             Action::make('check')
                 ->label('Check for updates')
                 ->color('gray')
-                ->action('checkForUpdates'),
+                ->action(fn () => $this->checkForUpdates()),
             Action::make('applyManifest')
                 ->label('Download + install latest')
                 ->color('primary')
                 ->visible(fn () => $allowed && $this->manifestEntry !== null)
-                ->action('applyManifest'),
+                ->action(fn () => $this->applyManifest()),
             Action::make('applyUpload')
                 ->label('Apply uploaded files')
                 ->color('primary')
                 ->visible(fn () => $allowed)
-                ->action('applyUpload'),
+                ->action(fn () => $this->applyUpload()),
         ];
     }
 
@@ -121,6 +115,15 @@ class Updates extends Page
             $this->checkForUpdates();
             if ($this->manifestEntry === null) return;
         }
+
+        // Seed progress + dispatch a browser event so the in-page
+        // poller starts showing live state immediately. The poller
+        // and this action run in different PHP-FPM workers, so
+        // download / verify / extract / migrate steps light up
+        // while this request is still blocked on the long apply.
+        app(ProgressTracker::class)->reset('Starting update…');
+        $this->dispatch('updater-started');
+
         $svc = app(UpdateService::class);
         $result = $svc->applyDownload($this->manifestEntry);
         $this->surfaceResult($result);
@@ -139,9 +142,11 @@ class Updates extends Page
         $zipAbs = $disk->path($zipPath);
         $sigAbs = $disk->path($sigPath);
 
+        app(ProgressTracker::class)->reset('Starting update from uploaded zip…');
+        $this->dispatch('updater-started');
+
         $svc = app(UpdateService::class);
         $result = $svc->applyUploaded($zipAbs, $sigAbs);
-        // Clean up the uploads regardless.
         try { $disk->delete($zipPath); $disk->delete($sigPath); } catch (\Throwable $e) {}
         $this->surfaceResult($result);
     }
@@ -155,6 +160,9 @@ class Updates extends Page
             Notification::make()->title('Updated')->body($msg)->success()->persistent()->send();
             $this->form->fill();
             $this->manifestEntry = null;
+            // Hard reload so the new view cache + asset URLs come
+            // from the just-applied version.
+            $this->redirect('/admin/updates');
             return;
         }
         Notification::make()
@@ -173,6 +181,7 @@ class Updates extends Page
             'manifest' => $this->manifestEntry,
             'allowed'  => app(LicenseService::class)->isUpdateAllowed(),
             'license'  => app(LicenseService::class)->status(),
+            'progress' => app(ProgressTracker::class)->read(),
         ];
     }
 }

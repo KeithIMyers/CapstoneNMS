@@ -1,4 +1,12 @@
-Installer + bootstrap fixes from the first end-to-end install run on a real shared host. Backfill migration for the legacy `pages` table that the public footer queries (was missing on every fresh install). Updater now appends a Cloudflare cache-buster so a freshly-published manifest is visible immediately rather than waiting on the CDN edge TTL.
+Live-progress UI for in-flight updates — the apply now writes a JSON progress file at every step (download / verify / snapshot / extract / merge / migrate) and the Filament Updates page polls it via Alpine.js, so customers see a real progress bar + step name instead of a frozen "applying" spinner. Filament header actions now closure-bound so they actually fire.
+
+## 1.0.3-dev
+
+- New `App\Services\Update\ProgressTracker` writes the apply's per-step state to `storage/app/private/updater/progress.json`.
+- `UpdateService::applyDownload` + `applyZip` call the tracker at every major step, also bump `set_time_limit(0)` + `ignore_user_abort(true)` so a slow CDN or big snapshot doesn't get killed.
+- New `UpdaterController::progress` JSON endpoint (`/capstone-updater/progress`) the page polls every 1.2s.
+- Filament Updates page rewritten: header actions use closures (`->action(fn () => $this->method())`) instead of the unreliable string-form binding; new Alpine progress card lights up on the `updater-started` Livewire event AND on poll-detected running state; auto-reloads on completion.
+- Apply success now `$this->redirect('/admin/updates')` so the post-apply view is rendered against the freshly-cached new version's view files.
 
 ## 1.0.2-dev
 

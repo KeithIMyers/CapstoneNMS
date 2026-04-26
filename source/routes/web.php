@@ -174,6 +174,14 @@ Route::group(['namespace' => 'App\Http\Controllers'], function () {
         ->middleware('throttle:120,1')
         ->name('image.proxy');
 
+    // JSON polling endpoint the Filament Updates page uses to render
+    // live progress while an apply is in flight. Lives outside the
+    // Filament Livewire surface so the polling worker doesn't share
+    // a PHP-FPM thread with the long-running apply request.
+    Route::get('capstone-updater/progress', 'UpdaterController@progress')
+        ->middleware('auth')
+        ->name('updater.progress');
+
     // Offline fallback rendered by the service worker when both network
     // and precache miss.
     Route::view('offline', 'pages.offline')->name('offline');

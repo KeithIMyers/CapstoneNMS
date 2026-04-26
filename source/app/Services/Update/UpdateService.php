@@ -3,6 +3,7 @@
 namespace App\Services\Update;
 
 use App\Services\Licensing\LicenseService;
+use App\Services\Update\ProgressTracker;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
@@ -111,38 +112,64 @@ class UpdateService
      */
     public function applyDownload(array $entry): array
     {
+        // Long-running apply on shared hosting — unlock the time +
+        // memory limits so a slow CDN or a big snapshot doesn't get
+        // killed by PHP-FPM's defaults.
+        @set_time_limit(0);
+        @ini_set('memory_limit', '512M');
+        @ignore_user_abort(true);
+
+        $progress = app(ProgressTracker::class);
+        $version = (string) ($entry['version'] ?? '');
+        $progress->reset("Preparing update {$version}…");
+
         if (! $this->isUpdateAllowed()) {
-            return ['ok' => false, 'errors' => ['Updates require an active license. Renew + re-upload your license to enable.']];
+            $err = ['Updates require an active license. Renew + re-upload your license to enable.'];
+            $progress->fail($err);
+            return ['ok' => false, 'errors' => $err];
         }
 
         $url = (string) ($entry['url'] ?? '');
         $sigUrl = (string) ($entry['sig_url'] ?? '');
         $sha = strtolower((string) ($entry['checksum_sha256'] ?? ''));
         if ($url === '' || $sigUrl === '') {
-            return ['ok' => false, 'errors' => ['Manifest entry is missing url / sig_url']];
+            $err = ['Manifest entry is missing url / sig_url'];
+            $progress->fail($err);
+            return ['ok' => false, 'errors' => $err];
         }
 
         $disk = Storage::disk('local');
-        $zipPath = self::UPLOADS_DIR . '/' . Str::slug((string) ($entry['version'] ?? 'pending')) . '.zip';
+        $zipPath = self::UPLOADS_DIR . '/' . Str::slug($version ?: 'pending') . '.zip';
         $sigPath = $zipPath . '.sig';
 
         try {
+            $progress->step('downloading', 5, "Downloading {$version}…");
             $zipBytes = (string) Http::timeout(120)->get($url)->body();
-            if ($zipBytes === '') return ['ok' => false, 'errors' => ['Empty zip download']];
-            if ($sha !== '' && hash('sha256', $zipBytes) !== $sha) {
-                return ['ok' => false, 'errors' => ['SHA-256 checksum mismatch on the downloaded zip']];
+            if ($zipBytes === '') {
+                $err = ['Empty zip download'];
+                $progress->fail($err);
+                return ['ok' => false, 'errors' => $err];
             }
+            $progress->step('checksumming', 25, 'Verifying checksum…');
+            if ($sha !== '' && hash('sha256', $zipBytes) !== $sha) {
+                $err = ['SHA-256 checksum mismatch on the downloaded zip'];
+                $progress->fail($err);
+                return ['ok' => false, 'errors' => $err];
+            }
+            $progress->step('downloading_sig', 28, 'Downloading signature…');
             $sigBytes = (string) Http::timeout(15)->get($sigUrl)->body();
             $disk->put($zipPath, $zipBytes);
             $disk->put($sigPath, $sigBytes);
         } catch (\Throwable $e) {
-            return ['ok' => false, 'errors' => ['Download failed: ' . $e->getMessage()]];
+            $err = ['Download failed: ' . $e->getMessage()];
+            $progress->fail($err);
+            return ['ok' => false, 'errors' => $err];
         }
 
         return $this->applyZip(
             $disk->path($zipPath),
             $disk->path($sigPath),
-            (string) ($entry['version'] ?? ''),
+            $version,
         );
     }
 
@@ -169,33 +196,45 @@ class UpdateService
      */
     private function applyZip(string $zipPath, string $sigPath, string $version): array
     {
-        if (! is_file($zipPath)) return ['ok' => false, 'errors' => ['Zip not found at ' . $zipPath]];
-        if (! is_file($sigPath)) return ['ok' => false, 'errors' => ['Signature not found at ' . $sigPath]];
+        @set_time_limit(0);
+        $progress = app(ProgressTracker::class);
 
+        if (! is_file($zipPath)) { $progress->fail($e = ['Zip not found at ' . $zipPath]); return ['ok' => false, 'errors' => $e]; }
+        if (! is_file($sigPath)) { $progress->fail($e = ['Signature not found at ' . $sigPath]); return ['ok' => false, 'errors' => $e]; }
+
+        $progress->step('verifying', 35, 'Verifying signature…');
         $zipBytes = (string) file_get_contents($zipPath);
         $sigBytes = (string) file_get_contents($sigPath);
         if (! $this->verifyDetached($zipBytes, $sigBytes)) {
-            return ['ok' => false, 'errors' => ['Signature verification failed for the update zip.']];
+            $err = ['Signature verification failed for the update zip.'];
+            $progress->fail($err);
+            return ['ok' => false, 'errors' => $err];
         }
 
-        // Snapshot first.
+        $progress->step('snapshotting', 45, 'Snapshotting current install (rollback point)…');
         $backupRel = $this->snapshotInstall();
         if ($backupRel === null) {
-            return ['ok' => false, 'errors' => ['Could not write pre-update snapshot — refusing to apply.']];
+            $err = ['Could not write pre-update snapshot — refusing to apply.'];
+            $progress->fail($err);
+            return ['ok' => false, 'errors' => $err];
         }
 
-        // Extract to staging, then rsync into base_path() (preserving env/storage).
+        $progress->step('extracting', 65, 'Extracting…');
         $stageRel = self::STAGING_DIR . '/' . Str::random(12);
         $stageAbs = Storage::disk('local')->path($stageRel);
         File::ensureDirectoryExists($stageAbs);
 
         $zip = new \ZipArchive();
         if ($zip->open($zipPath) !== true) {
-            return ['ok' => false, 'errors' => ['Could not open update zip']];
+            $err = ['Could not open update zip'];
+            $progress->fail($err);
+            return ['ok' => false, 'errors' => $err];
         }
         if (! $zip->extractTo($stageAbs)) {
             $zip->close();
-            return ['ok' => false, 'errors' => ['Zip extraction failed']];
+            $err = ['Zip extraction failed'];
+            $progress->fail($err);
+            return ['ok' => false, 'errors' => $err];
         }
         $zip->close();
 
@@ -208,15 +247,14 @@ class UpdateService
             if (is_dir($only)) $stageAbs = $only;
         }
 
-        // Copy the new files in, preserving the customer's data and
-        // configuration. We use a manual file walk rather than rsync
-        // because rsync isn't guaranteed on shared hosting.
+        $progress->step('merging', 80, 'Copying new files into install…');
         $copyErrors = $this->mergeIntoInstall($stageAbs);
         if (! empty($copyErrors)) {
+            $progress->fail($copyErrors, 'Some files could not be written.');
             return ['ok' => false, 'errors' => $copyErrors, 'backup' => $backupRel];
         }
 
-        // Migrations + cache rebuild.
+        $progress->step('migrating', 92, 'Running database migrations + clearing caches…');
         try {
             Artisan::call('migrate', ['--force' => true]);
             Artisan::call('config:clear');
@@ -224,12 +262,15 @@ class UpdateService
             Artisan::call('route:clear');
             Artisan::call('config:cache');
         } catch (\Throwable $e) {
-            return ['ok' => false, 'errors' => ['Post-install commands failed: ' . $e->getMessage()], 'backup' => $backupRel];
+            $err = ['Post-install commands failed: ' . $e->getMessage()];
+            $progress->fail($err);
+            return ['ok' => false, 'errors' => $err, 'backup' => $backupRel];
         }
 
         // Clean up staging.
         File::deleteDirectory(Storage::disk('local')->path(self::STAGING_DIR));
 
+        $progress->complete("Updated to {$version}.", ['backup' => $backupRel, 'version' => $version]);
         return ['ok' => true, 'errors' => [], 'backup' => $backupRel, 'version' => $version];
     }
 
