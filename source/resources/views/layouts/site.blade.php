@@ -113,6 +113,7 @@
      (vote results, like counts, new live entries) also write here. --}}
 <div id="sr-announce" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
+@include('partials.site.dev-banner')
 @yield('reading_progress')
 @include('partials.site.breaking')
 @include('partials.site.masthead')

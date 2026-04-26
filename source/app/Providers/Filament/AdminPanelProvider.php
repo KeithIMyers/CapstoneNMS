@@ -92,6 +92,13 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
                 VerifyTwoFactor::class,
-            ]);
+            ])
+            // Top-of-panel dev banner. Same trigger conditions as the
+            // public-side partial (license missing OR kind != production)
+            // so admins of unlicensed / dev installs can't miss it.
+            ->renderHook(
+                \Filament\View\PanelsRenderHook::BODY_START,
+                fn (): string => view('partials.site.dev-banner')->render(),
+            );
     }
 }

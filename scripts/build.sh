@@ -38,7 +38,19 @@ rsync -a \
   --exclude='phpunit.xml' \
   --exclude='TODO.md' \
   --exclude='.claude/' \
+  --exclude='storage/app/private/licensing/*' \
+  --exclude='app/Console/Commands/InstallDevLicenseCommand.php' \
   "${SRC}/" "${BUILD}/"
+
+# Sanity check: a dev license must NEVER end up in a customer dist.
+if [ -f "${BUILD}/storage/app/private/licensing/license.dat" ]; then
+  echo "FATAL: dev license leaked into build/. Aborting." >&2
+  exit 1
+fi
+if [ -f "${BUILD}/app/Console/Commands/InstallDevLicenseCommand.php" ]; then
+  echo "FATAL: license:install-dev command leaked into build/. Aborting." >&2
+  exit 1
+fi
 
 echo "==> composer install --no-dev"
 ( cd "${BUILD}" && composer install --no-dev --optimize-autoloader --no-interaction --quiet )

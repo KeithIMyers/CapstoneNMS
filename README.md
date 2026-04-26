@@ -23,8 +23,9 @@ CapstoneNMS/
 
 | Phase | Scope | Status |
 |---|---|---|
-| **A** | Fork + scaffold + rebrand + tier defaults + LicenseService stub | ✅ this commit |
-| **B** | Ed25519 license mint + verify + tier-cap enforcement + admin License page | pending |
+| **A** | Fork + scaffold + rebrand + tier defaults + LicenseService stub | ✅ |
+| **A.1** | Strip `APP_ENV` bypass; license `kind` (production/development/trial); file-based licensing; tightened host check; public + admin dev banner; `license:install-dev` CLI | ✅ this commit |
+| **B** | Ed25519 license mint + verify + tier-cap enforcement on user create / role change + admin License page | pending |
 | **C** | Web installer (`/install`) with server-requirements preflight | pending |
 | **D** | Web updater (CDN manifest + signed-zip apply + rollback) | pending |
 | **E** | Source protection pass on the licensing touchpoints | pending |

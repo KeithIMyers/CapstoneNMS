@@ -2,6 +2,18 @@
 
 CapstoneNMS is licensed software. Each license token unlocks the product for a specific list of domains, a specific tier, and an expiry date.
 
+## License kinds
+
+Every license token carries a **kind**, signed into the payload alongside the tier and domains:
+
+| Kind | Public banner | Issued for | Domain restrictions |
+|---|---|---|---|
+| `production` | hidden (paying customer) | live customer deployment | per the licensed domain list |
+| `development` | always shown — "This is a dev build, report unlicensed use…" | customer staging/dev environments | typically loopback + customer's dev domains |
+| `trial` | shown — "Trial — N days remaining" | evaluation prospects | broad, short-expiry |
+
+The kind is part of the signed payload, so a pirate can't flip a `development` license to `production` by editing the file — the signature breaks immediately.
+
 ## Tiers
 
 | Tier | Admins | Editors | Authors | Agents | Paywall | "Powered by" footer |

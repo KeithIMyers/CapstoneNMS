@@ -23,12 +23,15 @@ cp .env.example .env
 php artisan key:generate
 php artisan migrate --seed
 php artisan storage:link
+php artisan license:install-dev          # mints a kind=development license
 npm install
 npm run build
 php artisan serve
 ```
 
-Then visit `http://127.0.0.1:8000` for the public site or `http://127.0.0.1:8000/admin` for the panel.
+Then visit `http://127.0.0.1:8000` for the public site or `http://127.0.0.1:8000/admin` for the panel. The dev banner will appear at the top of every page — it's intentional and stays on every kind=development license.
+
+The dev license file is gitignored from `source/storage/app/private/licensing/` and stripped from `build/` by `scripts/build.sh`. It cannot accidentally end up in a customer dist.
 
 ## Architecture
 
