@@ -45,14 +45,24 @@ ASSUME_YES=0
 NONINTERACTIVE=0
 
 # When piped via `curl | bash` stdin is the curl pipe, not the terminal,
-# so `read` blocks forever. Reopen stdin from /dev/tty when available so
-# prompts work in both `curl | bash` and `bash install.sh` flows.
-# /dev/tty may exist but fail to open (no controlling terminal in cron /
-# certain containers / CI runners) — try the redirect and fall back.
-if [ ! -t 0 ]; then
-    if ! exec </dev/tty 2>/dev/null; then
+# so `read` would EOF / block. Reopen stdin from /dev/tty when available
+# so prompts work in both `curl | bash` and `bash install.sh` flows.
+#
+# IMPORTANT: `exec <…` is a shell builtin that PERMANENTLY rewrites the
+# shell's fds. Any extra redirection on this line (e.g. `2>/dev/null`)
+# would also permanently rewrite stderr, swallowing every later
+# warn / die / prompt. So we keep the redirect minimal and disable
+# set -e around it just for the case where /dev/tty exists but isn't
+# openable (no controlling terminal — cron, weird containers).
+if [ ! -t 0 ] && [ -c /dev/tty ]; then
+    set +e
+    exec </dev/tty
+    if [ $? -ne 0 ]; then
         NONINTERACTIVE=1
     fi
+    set -e
+elif [ ! -t 0 ]; then
+    NONINTERACTIVE=1
 fi
 
 TMPDIR=""
