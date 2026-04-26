@@ -4,7 +4,7 @@ CapstoneNMS updates are managed from **Site Settings → Updates** in the admin 
 
 ## How it works
 
-1. The admin panel checks `https://updates.capstonenms.com/manifest.json` once per day. The manifest is a signed JSON document listing every released version, its download URL, signature, and minimum-PHP / migration notes.
+1. The admin panel checks `https://update.capstonenms.com/manifest.json` once per day. The manifest is a signed JSON document listing every released version, its download URL, signature, and minimum-PHP / migration notes.
 2. When a new version is available, you see an "Update available" banner.
 3. Click **Update** → CapstoneNMS:
     - Downloads the signed `.zip` from the CDN

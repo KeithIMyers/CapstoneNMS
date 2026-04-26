@@ -2,8 +2,17 @@
 
 use Illuminate\Support\Facades\Route;
 
+// Web installer. Registered ahead of everything else so a fresh
+// install (no installed.lock) routes to /install regardless of
+// what other routes are defined. Once installed, the
+// RedirectToInstaller middleware lets all the other routes through
+// and the installer is a soft 404 (the controller aborts).
+Route::group(['namespace' => 'App\Http\Controllers'], function () {
+    Route::get('install', 'InstallController@show')->name('install.show');
+    Route::post('install', 'InstallController@perform')->name('install.perform');
+});
 
-Route::group(['namespace' => 'App\Http\Controllers'], function () {    
+Route::group(['namespace' => 'App\Http\Controllers'], function () {
 
     Route::get('/', 'IndexController@index')->name('home');
 

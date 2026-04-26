@@ -58,6 +58,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 \Illuminate\Http\Request::HEADER_X_FORWARDED_AWS_ELB
         );
 
+        // Forces every visitor to /install until the customer
+        // completes the web installer. Once installed.lock is present
+        // this is a pass-through.
+        $middleware->prepend(\App\Http\Middleware\RedirectToInstaller::class);
+
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
 
         // Captures `?ref=CODE` from any landing-page URL and stashes
@@ -77,6 +82,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // would otherwise carry a stale CSRF token. Double-opt-in via
         // email is what actually verifies the subscriber.
         $middleware->validateCsrfTokens(except: [
+            // The web installer runs on a fresh dist where the first
+            // GET bootstrapped APP_KEY and the same browser may not
+            // have a session yet. The InstallController::perform path
+            // does its own input validation; CSRF on the very first
+            // POST would force the customer to refresh and start over.
+            'install',
             // newsletter/subscribe stays exempt because it can be POSTed
             // from response-cached pages (the cached HTML carries a
             // stale token); double-opt-in by email is the real verifier.

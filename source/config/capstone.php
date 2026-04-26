@@ -44,7 +44,7 @@ return [
     | download zip + signature manually and upload them through the
     | same admin UI.
     */
-    'update_manifest_url' => env('CAPSTONE_UPDATE_MANIFEST_URL', 'https://updates.capstonenms.com/manifest.json'),
+    'update_manifest_url' => env('CAPSTONE_UPDATE_MANIFEST_URL', 'https://update.capstonenms.com/manifest.json'),
 
     /*
     |---------------------------------------------------------------
