@@ -329,9 +329,12 @@ class UpdateService
     }
 
     /**
-     * Copy files from $stageAbs into base_path(), skipping the
-     * preserve list. Returns an array of error messages (empty on
-     * success).
+     * Copy files from $stageAbs into the install. Layout-aware:
+     *   - STANDARD: files merge into base_path() as-is.
+     *   - SHARED:   non-public/* merge into base_path() (= _app/);
+     *               public/* contents flatten up to dirname(base_path)
+     *               (= the doc root).
+     * Files in PRESERVE_PATHS are never overwritten regardless.
      *
      * @return array<int, string>
      */
@@ -339,6 +342,11 @@ class UpdateService
     {
         $errors = [];
         $base = base_path();
+        $layout = app(\App\Services\Install\LayoutService::class)->persistedMode()
+            ?? \App\Services\Install\LayoutService::MODE_STANDARD;
+        $docRoot = $layout === \App\Services\Install\LayoutService::MODE_SHARED
+            ? dirname($base)
+            : null;
 
         $iter = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($stageAbs, \FilesystemIterator::SKIP_DOTS),
@@ -349,7 +357,21 @@ class UpdateService
             $relPath = substr($f->getPathname(), strlen($stageAbs) + 1);
             if ($this->isPreserved($relPath)) continue;
 
-            $dest = $base . DIRECTORY_SEPARATOR . $relPath;
+            // SHARED layout remap: anything under public/* lands in
+            // the doc root (one level up from base_path), with the
+            // 'public/' prefix stripped. Everything else merges into
+            // base_path() which is _app/.
+            if ($docRoot !== null && (str_starts_with($relPath, 'public/') || $relPath === 'public')) {
+                if ($relPath === 'public') {
+                    // The directory itself doesn't exist in shared
+                    // layout — its contents are flat at the doc root.
+                    continue;
+                }
+                $rest = substr($relPath, strlen('public/'));
+                $dest = $docRoot . DIRECTORY_SEPARATOR . $rest;
+            } else {
+                $dest = $base . DIRECTORY_SEPARATOR . $relPath;
+            }
 
             try {
                 if ($f->isDir()) {

@@ -88,6 +88,7 @@ return Application::configure(basePath: dirname(__DIR__))
             // does its own input validation; CSRF on the very first
             // POST would force the customer to refresh and start over.
             'install',
+            'install/relayout',
             // newsletter/subscribe stays exempt because it can be POSTed
             // from response-cached pages (the cached HTML carries a
             // stale token); double-opt-in by email is the real verifier.

@@ -10,6 +10,10 @@ use Illuminate\Support\Facades\Route;
 Route::group(['namespace' => 'App\Http\Controllers'], function () {
     Route::get('install', 'InstallController@show')->name('install.show');
     Route::post('install', 'InstallController@perform')->name('install.perform');
+    // Shared-hosting layout fixer: presented before the wizard when
+    // the dist was extracted directly into public_html / public / www.
+    // After the relayout completes we redirect back to /install.
+    Route::post('install/relayout', 'InstallController@relayout')->name('install.relayout');
 });
 
 Route::group(['namespace' => 'App\Http\Controllers'], function () {

@@ -3,17 +3,29 @@
 namespace App\Http\Controllers;
 
 use App\Services\Install\InstallerService;
+use App\Services\Install\LayoutService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
 class InstallController extends Controller
 {
-    public function __construct(private readonly InstallerService $installer) {}
+    public function __construct(
+        private readonly InstallerService $installer,
+        private readonly LayoutService $layout,
+    ) {}
 
     public function show(Request $request)
     {
         if ($this->installer->isInstalled()) abort(404);
+
+        // pre_layout: customer extracted the dist into a shared-host
+        // doc root (public_html / public / www / htdocs). Offer the
+        // one-click relayout before the wizard so the rest of the
+        // install pipeline runs against the canonical SHARED layout.
+        if ($this->layout->detect() === 'pre_layout') {
+            return view('pages.install-relayout');
+        }
 
         // First-run bootstrap. A fresh dist has no .env, so APP_KEY
         // is missing — sessions / CSRF / encrypted cookies all fail
@@ -37,6 +49,38 @@ class InstallController extends Controller
             'old'              => session('_install_old', []),
             'errors'           => session('_install_errors', []),
         ]);
+    }
+
+    /**
+     * One-click relayout from PRE_LAYOUT into SHARED. After the
+     * filesystem moves complete, the same /install URL renders the
+     * normal wizard (because base_path() now resolves to <docroot>/_app/
+     * and the layout marker reads "shared").
+     */
+    public function relayout(Request $request)
+    {
+        if ($this->installer->isInstalled()) abort(404);
+        if ($this->layout->detect() !== 'pre_layout') {
+            // Already in standard or shared — nothing to do.
+            return redirect('/install');
+        }
+
+        $result = $this->layout->relayoutToShared();
+
+        if (! $result['ok']) {
+            return view('pages.install-relayout', [
+                'errors' => $result['errors'],
+                'moved'  => $result['moved'],
+            ]);
+        }
+
+        // Mark the install lock so we know the relayout was clean,
+        // then redirect to the wizard. The relayout invalidates the
+        // current Laravel boot (paths changed), but the layout-aware
+        // public/index.php picks up the new location on the next
+        // request.
+        return redirect('/install')
+            ->with('flash_message', "Relayout complete — {$result['moved']} top-level entries moved into _app/.");
     }
 
     private function ensureEnvBootstrapped(): bool

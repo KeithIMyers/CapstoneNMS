@@ -2,6 +2,7 @@
 
 namespace App\Services\Install;
 
+use App\Services\Install\LayoutService;
 use App\Services\Licensing\LicenseService;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -224,12 +225,28 @@ class InstallerService
             }
         }
 
-        // 8. Mark installed last — if anything above blew up, the
+        // 8. Persist the layout marker so UpdateService knows where
+        //    incoming files belong on shared-host installs. Standard
+        //    layout still gets marked explicitly so the absence of a
+        //    marker doesn't propagate ambiguity into future updates.
+        try {
+            $layoutSvc = app(LayoutService::class);
+            $detected = $layoutSvc->detect();
+            // 'pre_layout' can't reach here because show() short-
+            // circuits to the relayout view first.
+            if ($detected === 'pre_layout') $detected = LayoutService::MODE_STANDARD;
+            $layoutSvc->writeMarker($detected);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'errors' => ['Could not write layout marker: '.$e->getMessage()]];
+        }
+
+        // 9. Mark installed last — if anything above blew up, the
         //    customer can retry without a stale lock blocking them.
         try {
             Storage::disk('local')->put(self::LOCK_PATH, json_encode([
                 'installed_at' => gmdate('c'),
                 'version'      => (string) config('capstone.product_version'),
+                'layout'       => app(LayoutService::class)->persistedMode(),
                 'license_id'   => (string) (app(LicenseService::class)->status()['license_id'] ?? ''),
             ], JSON_PRETTY_PRINT));
         } catch (\Throwable $e) {
