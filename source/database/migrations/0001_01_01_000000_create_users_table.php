@@ -12,6 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
+            // Identity / auth
             $table->id();
             $table->string('role')->default('user');
             $table->string('name');
@@ -20,6 +21,26 @@ return new class extends Migration
             $table->string('password');
             $table->rememberToken();
             $table->timestamps();
+
+            // Profile fields the User model's $fillable / Filament
+            // resources expect. Originally provisioned via the
+            // legacy CodeCanyon SQL dump; later migrations reference
+            // them (e.g. ->after('phone')) so they have to exist on
+            // a fresh install.
+            $table->string('slug')->nullable()->unique();
+            $table->text('bio')->nullable();
+            $table->string('twitter_handle')->nullable();
+            $table->string('phone', 40)->nullable();
+            $table->string('image')->nullable();
+
+            // Account / role state
+            $table->unsignedTinyInteger('status')->default(1)->index();
+            $table->boolean('is_agent')->default(false)->index();
+            $table->string('google_id')->nullable()->unique();
+
+            // Editorial / AI scaffolding the dashboard reads
+            $table->unsignedBigInteger('ai_daily_budget_microusd')->nullable();
+            $table->unsignedSmallInteger('ai_calls_per_minute')->nullable();
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
