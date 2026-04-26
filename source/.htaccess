@@ -1,0 +1,33 @@
+# NOTE: The proper fix is to point your DreamHost web directory at
+# USNews.today/public/ and delete this file. This is a defensive shim
+# for cases where the web root is still the project root.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    Options +FollowSymLinks -Indexes
+
+    # Block dotfiles (.env, .git, .htaccess, .lic, etc.)
+    RewriteRule "(^|/)\." - [F,L]
+
+    # Block source directories — never serve these
+    RewriteRule ^(app|bootstrap|config|database|resources|routes|storage|tests|vendor|lang)(/|$) - [F,L]
+
+    # Block sensitive files at the project root
+    RewriteRule ^(composer\.(json|lock)|package(-lock)?\.json|artisan|server\.php|phpunit\.xml|vite\.config\.js|\.editorconfig|\.gitattributes|deploy\.sh|README\.md)$ - [F,L]
+
+    # Serve static assets from public/ when they exist
+    RewriteCond %{DOCUMENT_ROOT}/public%{REQUEST_URI} -f
+    RewriteRule ^(.*)$ public/$1 [L]
+
+    # Everything else goes through Laravel's front controller
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/index.php [L]
+</IfModule>
+
+# Extra belt-and-suspenders: explicitly deny even without mod_rewrite
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+<FilesMatch "(composer\.(json|lock)|package(-lock)?\.json|artisan|server\.php|phpunit\.xml|deploy\.sh)$">
+    Require all denied
+</FilesMatch>

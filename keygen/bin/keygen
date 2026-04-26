@@ -1,0 +1,29 @@
+#!/usr/bin/env php
+<?php
+
+/*
+ * CapstoneNMS license-mint CLI.
+ *
+ * Phase A: skeleton only. The Phase B drop fills in the Ed25519
+ * signing flow + bootstrap subcommand. Today this binary just
+ * prints help so the build pipeline can wire it without erroring.
+ *
+ * Subcommands the Phase B drop will add:
+ *   keygen bootstrap                 generate the product key pair
+ *                                    (writes private to keys/, prints
+ *                                    public for config/capstone.php)
+ *   keygen mint --tier=pro \         mint a license, printing both
+ *               --domains=acme.com \   the file form and a paste-blob
+ *               --customer=… \
+ *               --expires=2027-04-26
+ *   keygen verify license.dat        round-trip a minted file
+ */
+
+require __DIR__ . '/../vendor/autoload.php';
+
+use Symfony\Component\Console\Application;
+
+$app = new Application('CapstoneNMS keygen', '1.0.0-dev');
+
+// Phase B will register: BootstrapCommand, MintCommand, VerifyCommand.
+$app->run();

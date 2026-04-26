@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 36" role="img" aria-label="USNews.today">
+  <style>
+    .a { font: 800 24px/1 ui-serif, Iowan Old Style, Charter, Georgia, serif; fill: currentColor; letter-spacing: -0.02em; }
+    .b { font: 800 24px/1 ui-serif, Iowan Old Style, Charter, Georgia, serif; fill: #0ea5e9; letter-spacing: -0.02em; }
+    .c { font: 600 11px/1 ui-sans-serif, system-ui, sans-serif; fill: currentColor; letter-spacing: 0.18em; text-transform: uppercase; }
+  </style>
+  <text class="a" x="0" y="22">USNews</text>
+  <text class="b" x="98" y="22">.today</text>
+  <line x1="0" y1="29" x2="240" y2="29" stroke="currentColor" stroke-width="0.5" stroke-opacity="0.2" />
+</svg>

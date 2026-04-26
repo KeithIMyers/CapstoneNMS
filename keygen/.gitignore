@@ -1,0 +1,6 @@
+/vendor/
+/keys/
+/out/
+.idea/
+.vscode/
+.DS_Store

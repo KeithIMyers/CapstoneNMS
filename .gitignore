@@ -1,0 +1,16 @@
+/build/
+/dist/
+/keygen/vendor/
+/source/.env
+/source/vendor/
+/source/node_modules/
+/source/storage/logs/*.log
+/source/storage/framework/cache/*
+/source/storage/framework/sessions/*
+/source/storage/framework/views/*
+.DS_Store
+.idea/
+.vscode/
+.dh-diag
+.env.backup
+source/.env.backup

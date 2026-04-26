@@ -1,0 +1,19 @@
+{
+    "name": "USNews.today",
+    "short_name": "USNews",
+    "description": "Independent reporting and a daily news brief.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "theme_color": "#0ea5e9",
+    "background_color": "#ffffff",
+    "icons": [
+        {
+            "src": "/site/img/favicon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ]
+}

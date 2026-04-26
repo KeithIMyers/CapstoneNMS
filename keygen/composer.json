@@ -1,0 +1,24 @@
+{
+    "name": "capstonenms/keygen",
+    "type": "project",
+    "description": "CapstoneNMS license-mint CLI. Generates Ed25519-signed license tokens (file + paste-blob form) plus the bootstrap key pair.",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.2",
+        "symfony/console": "^7.0",
+        "symfony/filesystem": "^7.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "CapstoneNMS\\Keygen\\": "src/"
+        }
+    },
+    "bin": [
+        "bin/keygen"
+    ],
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
