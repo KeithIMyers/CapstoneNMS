@@ -65,9 +65,19 @@ class UpdateService
         if ($url === '') return null;
 
         try {
-            $resp = Http::timeout(10)->withHeaders([
-                'User-Agent' => 'CapstoneNMS-Updater/' . $this->currentVersion(),
-            ])->get($url);
+            // Cloudflare caches arbitrary content by URL by default, so
+            // tack on a per-second cache-buster query to make sure we
+            // see new manifests within seconds of the publisher
+            // pushing one. (No-cache headers alone don't always pass
+            // through Cloudflare's edge.)
+            $bust = (str_contains($url, '?') ? '&' : '?') . 'b=' . time();
+            $resp = Http::timeout(10)
+                ->withHeaders([
+                    'User-Agent'     => 'CapstoneNMS-Updater/' . $this->currentVersion(),
+                    'Cache-Control'  => 'no-cache',
+                    'Pragma'         => 'no-cache',
+                ])
+                ->get($url . $bust);
         } catch (\Throwable $e) {
             Log::warning('UpdateService: manifest fetch failed', ['error' => $e->getMessage()]);
             return null;
