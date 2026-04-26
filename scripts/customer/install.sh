@@ -426,6 +426,46 @@ esac
 
 ok "files in place"
 
+# ---------- .env bootstrap --------------------------------------------
+#
+# Laravel's middleware stack (encrypt-cookies / start-session) crashes
+# with "No application encryption key has been specified" the moment a
+# request arrives without an APP_KEY in .env — even the redirect to
+# /install can't render. The web installer writes .env on its own, but
+# only AFTER the request has reached the controller, by which point
+# we've already 500'd. So we mint .env + APP_KEY here, before the
+# customer ever hits the URL.
+#
+# The web installer's apply() preserves APP_KEY when it rewrites .env
+# with the customer's database / site config, so this initial value
+# stays for the lifetime of the install.
+
+case "${LAYOUT}" in
+    standard) ENV_BASE="${APP_DIR}" ;;
+    shared)   ENV_BASE="${DOC_ROOT}/_app" ;;
+esac
+
+if [ ! -f "${ENV_BASE}/.env" ]; then
+    cp "${ENV_BASE}/.env.example" "${ENV_BASE}/.env"
+    ok ".env created from .env.example"
+fi
+
+if ! grep -qE '^APP_KEY=base64:' "${ENV_BASE}/.env"; then
+    APP_KEY="base64:$(php -r 'echo base64_encode(random_bytes(32));')"
+    if grep -qE '^APP_KEY=' "${ENV_BASE}/.env"; then
+        # Use a literal-safe sed: APP_KEY contains base64 chars including / and +
+        php -r '
+            $p = $argv[1]; $k = $argv[2];
+            $c = file_get_contents($p);
+            $c = preg_replace("/^APP_KEY=.*$/m", "APP_KEY=" . $k, $c);
+            file_put_contents($p, $c);
+        ' "${ENV_BASE}/.env" "${APP_KEY}"
+    else
+        echo "APP_KEY=${APP_KEY}" >> "${ENV_BASE}/.env"
+    fi
+    ok "APP_KEY generated"
+fi
+
 # ---------- finish ----------------------------------------------------
 
 cat <<DONE
