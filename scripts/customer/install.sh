@@ -46,13 +46,11 @@ NONINTERACTIVE=0
 
 # When piped via `curl | bash` stdin is the curl pipe, not the terminal,
 # so `read` blocks forever. Reopen stdin from /dev/tty when available so
-# prompts work in both `curl | bash` and `bash install.sh` flows. If
-# /dev/tty isn't available (cron, container without a controlling tty)
-# we fall back to non-interactive and require flags.
+# prompts work in both `curl | bash` and `bash install.sh` flows.
+# /dev/tty may exist but fail to open (no controlling terminal in cron /
+# certain containers / CI runners) — try the redirect and fall back.
 if [ ! -t 0 ]; then
-    if [ -r /dev/tty ] && [ -w /dev/tty ]; then
-        exec < /dev/tty
-    else
+    if ! exec </dev/tty 2>/dev/null; then
         NONINTERACTIVE=1
     fi
 fi
@@ -67,6 +65,23 @@ log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m  ✓\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m  !\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m  ✕\033[0m %s\n' "$*" >&2; exit 1; }
+
+banner() {
+    printf '\033[1;36m'
+    cat <<'BANNER'
+
+   ____                 _                   _   _ __  __ ____
+  / ___|__ _ _ __  ___| |_ ___  _ __   ___| \ | |  \/  / ___|
+ | |   / _` | '_ \/ __| __/ _ \| '_ \ / _ \  \| | |\/| \___ \
+ | |__| (_| | |_) \__ \ || (_) | | | |  __/ |\  | |  | |___) |
+  \____\__,_| .__/|___/\__\___/|_| |_|\___|_| \_|_|  |_|____/
+            |_|       News Management System
+
+BANNER
+    printf '\033[0;36m  https://capstonenms.com\033[0m\n\n'
+}
+
+banner
 
 usage() {
     cat <<USAGE
