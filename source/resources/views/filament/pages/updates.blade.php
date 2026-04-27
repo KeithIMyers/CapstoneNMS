@@ -14,43 +14,27 @@
     {{-- Live progress card. Hidden until either a poll detects an
          in-flight apply (status=running) OR the page receives the
          `updater-started` Livewire event from applyManifest()/
-         applyUpload(). Stops + redirects on complete/failed. --}}
+         applyUpload(). Stops + redirects on complete/failed.
+
+         Seed values live in a separate <script type="application/json">
+         block — embedding a JSON literal directly in the x-data="{...}"
+         attribute closed the attribute early on the inner double-quotes
+         and dumped the rest of the JS as visible page text. Alpine
+         picks up the data via window.__updaterCardSeed at init time. --}}
+
+    <script type="application/json" id="updater-card-seed">
+        {!! json_encode([
+            'visible'  => $progressVisibleInitial,
+            'state'    => $progressInitial,
+            'endpoint' => $progressEndpoint,
+        ], JSON_UNESCAPED_SLASHES) !!}
+    </script>
+
     <div
-        x-data="{
-            visible: {{ $progressVisibleInitial ? 'true' : 'false' }},
-            state: {!! json_encode($progressInitial, JSON_UNESCAPED_SLASHES) !!},
-            poll: null,
-            start() {
-                this.visible = true;
-                if (this.poll) return;
-                this.tick();
-                this.poll = setInterval(() => this.tick(), 1200);
-            },
-            stop() {
-                if (this.poll) { clearInterval(this.poll); this.poll = null; }
-            },
-            async tick() {
-                try {
-                    const r = await fetch('{{ $progressEndpoint }}', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
-                    if (! r.ok) return;
-                    const j = await r.json();
-                    this.state = j;
-                    if (j.status === 'complete' || j.status === 'failed') {
-                        this.stop();
-                        if (j.status === 'complete') {
-                            // Reload to show the new version + clear caches
-                            setTimeout(() => window.location.reload(), 1500);
-                        }
-                    }
-                } catch (e) { /* swallow transient network errors */ }
-            },
-            init() {
-                if (this.visible && (this.state && this.state.status === 'running')) this.start();
-                window.addEventListener('updater-started', () => this.start());
-            },
-        }"
+        x-data="updaterCard()"
         x-show="visible"
         x-transition
+        x-cloak
         style="margin-bottom:1.5rem;padding:1.25rem;background:#0f172a;color:#f1f5f9;border-radius:0.6rem;"
     >
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.85rem;">
@@ -142,4 +126,51 @@
     <p style="margin-top:2rem;font-size:0.85rem;color:var(--gray-500, #6b7280);">
         Every update is verified against the embedded product key before any files are touched. A pre-update snapshot is written to <code>storage/app/private/updates/backups/</code> automatically.
     </p>
+
+    <script>
+        // Defined as a global so Alpine's x-data="updaterCard()" can resolve it.
+        window.updaterCard = function () {
+            const seed = JSON.parse(document.getElementById('updater-card-seed').textContent);
+            return {
+                visible: !! seed.visible,
+                state: seed.state,
+                endpoint: seed.endpoint,
+                poll: null,
+
+                start() {
+                    this.visible = true;
+                    if (this.poll) return;
+                    this.tick();
+                    this.poll = setInterval(() => this.tick(), 1200);
+                },
+
+                stop() {
+                    if (this.poll) { clearInterval(this.poll); this.poll = null; }
+                },
+
+                async tick() {
+                    try {
+                        const r = await fetch(this.endpoint, {
+                            credentials: 'same-origin',
+                            headers: { 'Accept': 'application/json' },
+                        });
+                        if (! r.ok) return;
+                        const j = await r.json();
+                        this.state = j;
+                        if (j.status === 'complete' || j.status === 'failed') {
+                            this.stop();
+                            if (j.status === 'complete') {
+                                setTimeout(() => window.location.reload(), 1500);
+                            }
+                        }
+                    } catch (e) { /* swallow transient network errors */ }
+                },
+
+                init() {
+                    if (this.state && this.state.status === 'running') this.start();
+                    window.addEventListener('updater-started', () => this.start());
+                },
+            };
+        };
+    </script>
 </x-filament-panels::page>
