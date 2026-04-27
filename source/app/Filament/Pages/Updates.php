@@ -83,7 +83,19 @@ class Updates extends Page
             Action::make('applyManifest')
                 ->label('Download + install latest')
                 ->color('primary')
-                ->visible(fn () => $allowed && $this->manifestEntry !== null)
+                // Show only when the manifest's latest version is
+                // strictly newer than what's installed. The
+                // manifestEntry property is now populated by
+                // checkForUpdates() regardless of version (so the
+                // status card shows "Latest available"), so we have
+                // to gate the action's visibility separately.
+                ->visible(fn () => $allowed
+                    && $this->manifestEntry !== null
+                    && version_compare(
+                        (string) ($this->manifestEntry['version'] ?? '0.0.0'),
+                        app(UpdateService::class)->currentVersion(),
+                        '>',
+                    ))
                 ->action(fn () => $this->applyManifest()),
             // The air-gapped "Apply uploaded files" button lives
             // inside the Air-gapped install section in the page body,
