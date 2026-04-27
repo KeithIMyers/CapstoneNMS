@@ -160,24 +160,41 @@
     </p>
 
     <script>
-        // Defined as a global so Alpine's x-data="updaterCard()" can resolve it.
+        /*
+         * window.updaterCard — Alpine factory for the live progress card.
+         *
+         * Two cadences:
+         *   IDLE   — every 3s while no apply is in flight. Cheap (a
+         *            tiny JSON read). We have to poll continuously
+         *            because Livewire's $this->dispatch('updater-
+         *            started') is buffered into the action's response,
+         *            which doesn't return until AFTER the 30-60s apply
+         *            finishes — too late to use as the start signal.
+         *   ACTIVE — every 1.2s while status=running. Card visible.
+         *            On running→complete we reload once; on failed we
+         *            keep the card visible with the error list.
+         *
+         * Alpine `init()` always schedules a poll, so the moment the
+         * Filament action writes status=running to progress.json, the
+         * next idle tick (within 3s) catches it and the card appears.
+         */
         window.updaterCard = function () {
             const seed = JSON.parse(document.getElementById('updater-card-seed').textContent);
+            const IDLE_MS = 3000;
+            const ACTIVE_MS = 1200;
+
             return {
                 visible: !! seed.visible,
                 state: seed.state,
                 endpoint: seed.endpoint,
                 poll: null,
+                cadence: null,
 
-                start() {
-                    this.visible = true;
-                    if (this.poll) return;
-                    this.tick();
-                    this.poll = setInterval(() => this.tick(), 1200);
-                },
-
-                stop() {
-                    if (this.poll) { clearInterval(this.poll); this.poll = null; }
+                schedule(intervalMs) {
+                    if (this.cadence === intervalMs && this.poll) return;
+                    this.cadence = intervalMs;
+                    if (this.poll) clearInterval(this.poll);
+                    this.poll = setInterval(() => this.tick(), intervalMs);
                 },
 
                 async tick() {
@@ -185,22 +202,39 @@
                         const r = await fetch(this.endpoint, {
                             credentials: 'same-origin',
                             headers: { 'Accept': 'application/json' },
+                            cache: 'no-store',
                         });
                         if (! r.ok) return;
                         const j = await r.json();
+                        const prev = this.state ? this.state.status : null;
                         this.state = j;
-                        if (j.status === 'complete' || j.status === 'failed') {
-                            this.stop();
-                            if (j.status === 'complete') {
+
+                        if (j.status === 'running') {
+                            this.visible = true;
+                            this.schedule(ACTIVE_MS);
+                        } else if (j.status === 'complete') {
+                            this.visible = true;
+                            this.schedule(IDLE_MS);
+                            // Reload exactly once on the running→complete edge.
+                            if (prev === 'running') {
                                 setTimeout(() => window.location.reload(), 1500);
                             }
+                        } else if (j.status === 'failed') {
+                            this.visible = true;
+                            this.schedule(IDLE_MS);
+                        } else {
+                            // status=idle — no progress file. Hide the
+                            // card unless the PHP-side seed already
+                            // decided we're inside a post-finish window.
+                            if (! seed.visible) this.visible = false;
+                            this.schedule(IDLE_MS);
                         }
                     } catch (e) { /* swallow transient network errors */ }
                 },
 
                 init() {
-                    if (this.state && this.state.status === 'running') this.start();
-                    window.addEventListener('updater-started', () => this.start());
+                    this.schedule(this.state && this.state.status === 'running' ? ACTIVE_MS : IDLE_MS);
+                    this.tick();
                 },
             };
         };
