@@ -1,4 +1,10 @@
-Updates page UX overhaul — progress bar now styled to match the Filament panel, animates with a moving stripe so pauses between steps still show motion, only visible during an apply (no lingering "complete" card), and the air-gapped "Apply uploaded files" submit button moved next to its form. The apply pipeline also force-clears compiled view caches so future upgrades never get bitten by stale-cache 500s.
+Updates page polish — Alpine progress card polls the JSON endpoint continuously (3s idle / 1.2s active) so the UI lights up the moment the action writes its first progress entry, instead of waiting on a Livewire dispatch that's buffered into the apply's response. Status card always shows the latest published version. Download + install button hides when you're already on it.
+
+## 1.0.5-dev
+
+- Alpine progress card polls `/capstone-updater/progress` continuously (3s idle, 1.2s active when status=running). The Livewire-dispatched start event only fires after the action completes (response-buffered), so we can't rely on it.
+- "Latest available" status card populated whenever checkForUpdates runs, even when the manifest version equals current.
+- "Download + install latest" button hidden unless manifest version is strictly greater than installed version.
 
 ## 1.0.4-dev
 
