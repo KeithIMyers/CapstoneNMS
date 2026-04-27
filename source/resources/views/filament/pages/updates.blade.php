@@ -66,7 +66,10 @@
 
                 <div style="margin-top:0.85rem;font-size:0.825rem;color:var(--gray-500);">
                     <template x-if="state && state.status === 'complete'">
-                        <span style="color:var(--success-600);font-weight:600;">  ✓ Done — reloading…</span>
+                        <span>
+                            <span style="color:var(--success-600);font-weight:600;">  ✓ Done — reloading…</span>
+                            <button type="button" @click="manualReload()" style="margin-left:0.75rem;padding:0.25rem 0.65rem;border:1px solid var(--gray-300);background:transparent;color:inherit;border-radius:0.35rem;font-size:0.8rem;cursor:pointer;">Reload now</button>
+                        </span>
                     </template>
                     <template x-if="state && state.status === 'failed'">
                         <div>
@@ -179,13 +182,24 @@
          * next idle tick (within 3s) catches it and the card appears.
          */
         window.updaterCard = function () {
+            // We DELIBERATELY ignore the PHP-side seed for initial
+            // state. Filament uses wire:navigate, so navigating away
+            // and back to /admin/updates re-instantiates this Alpine
+            // component but the seed JSON in the page is whatever the
+            // Livewire-cached HTML had — which can be stale (e.g. a
+            // running 92% snapshot that's now long-since complete).
+            // Always start blank and let the first poll populate.
             const seed = JSON.parse(document.getElementById('updater-card-seed').textContent);
             const IDLE_MS = 3000;
             const ACTIVE_MS = 1200;
+            // sessionStorage key remembers the finished_at of the last
+            // apply we already auto-reloaded for, so we don't loop
+            // forever reloading the same complete entry.
+            const RELOAD_KEY = 'capnms-updater-reloaded-finished-at';
 
             return {
-                visible: !! seed.visible,
-                state: seed.state,
+                visible: false,
+                state: null,
                 endpoint: seed.endpoint,
                 poll: null,
                 cadence: null,
@@ -206,7 +220,6 @@
                         });
                         if (! r.ok) return;
                         const j = await r.json();
-                        const prev = this.state ? this.state.status : null;
                         this.state = j;
 
                         if (j.status === 'running') {
@@ -215,22 +228,19 @@
                         } else if (j.status === 'complete') {
                             this.visible = true;
                             this.schedule(IDLE_MS);
-                            // Reload exactly once on the running→complete edge.
-                            if (prev === 'running') {
+                            // Reload on first sighting of THIS
+                            // completion (keyed by finished_at so
+                            // we don't loop on the same one).
+                            const fa = String(j.finished_at || '');
+                            if (fa && sessionStorage.getItem(RELOAD_KEY) !== fa) {
+                                sessionStorage.setItem(RELOAD_KEY, fa);
                                 setTimeout(() => window.location.reload(), 1500);
                             }
                         } else if (j.status === 'failed') {
                             this.visible = true;
                             this.schedule(IDLE_MS);
                         } else {
-                            // status=idle (no progress file). Always
-                            // hide + clear local state. The Alpine
-                            // seed is frozen at page-render time, so
-                            // a stale "visible=true" from a previous
-                            // mount would otherwise persist across
-                            // navigations and keep showing the old
-                            // bar after the apply has finished and
-                            // the file has been cleaned up.
+                            // status=idle (no progress file).
                             this.visible = false;
                             this.state = null;
                             this.schedule(IDLE_MS);
@@ -238,9 +248,16 @@
                     } catch (e) { /* swallow transient network errors */ }
                 },
 
+                manualReload() {
+                    window.location.reload();
+                },
+
                 init() {
-                    this.schedule(this.state && this.state.status === 'running' ? ACTIVE_MS : IDLE_MS);
+                    this.schedule(IDLE_MS);
                     this.tick();
+                    // Re-tick on Filament/Livewire navigations so the
+                    // poll picks up where it should after wire:navigate.
+                    document.addEventListener('livewire:navigated', () => this.tick());
                 },
             };
         };
