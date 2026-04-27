@@ -1,27 +1,23 @@
 <x-filament-panels::page>
     @php
         $s = $this->getStatus();
-        // Resolve Alpine seed values PHP-side. Blade's @json directive
-        // miscounts nested brackets when fed expressions like
-        // `in_array(($a['b'] ?? null), ['x','y'])`, which threw
-        // "Unclosed '[' does not match ')'" on first render — so we
-        // pre-compute and emit JSON literals.
+        // The card is visible only while an apply is in flight, OR
+        // briefly after it completes/fails so the user sees the
+        // outcome before the page reloads. After a fresh page render
+        // with no in-flight progress, the card stays hidden.
         $progressInitial = $s['progress'] ?? null;
-        $progressVisibleInitial = in_array(($progressInitial['status'] ?? null), ['running', 'complete', 'failed'], true);
+        $progressVisibleInitial = ($progressInitial['status'] ?? null) === 'running'
+            || (
+                in_array(($progressInitial['status'] ?? null), ['complete', 'failed'], true)
+                && isset($progressInitial['finished_at'])
+                && (time() - (int) $progressInitial['finished_at']) < 30
+            );
         $progressEndpoint = route('updater.progress');
     @endphp
 
-    {{-- Live progress card. Hidden until either a poll detects an
-         in-flight apply (status=running) OR the page receives the
-         `updater-started` Livewire event from applyManifest()/
-         applyUpload(). Stops + redirects on complete/failed.
-
-         Seed values live in a separate <script type="application/json">
-         block — embedding a JSON literal directly in the x-data="{...}"
-         attribute closed the attribute early on the inner double-quotes
-         and dumped the rest of the JS as visible page text. Alpine
-         picks up the data via window.__updaterCardSeed at init time. --}}
-
+    {{-- Live progress card. Seed values live in a separate JSON
+         script so the inner double-quotes don't close the x-data
+         HTML attribute prematurely. --}}
     <script type="application/json" id="updater-card-seed">
         {!! json_encode([
             'visible'  => $progressVisibleInitial,
@@ -33,40 +29,67 @@
     <div
         x-data="updaterCard()"
         x-show="visible"
-        x-transition
+        x-transition.opacity
         x-cloak
-        style="margin-bottom:1.5rem;padding:1.25rem;background:#0f172a;color:#f1f5f9;border-radius:0.6rem;"
+        class="fi-section fi-section-has-content"
+        style="margin-bottom:1.5rem;"
     >
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.85rem;">
-            <div style="font-weight:700;font-size:1.05rem;" x-text="state ? (state.message || 'Updating…') : 'Starting…'"></div>
-            <div style="font-size:0.85rem;color:#94a3b8;" x-text="state && state.percent !== undefined ? state.percent + '%' : ''"></div>
-        </div>
+        <div class="fi-section-content-ctn">
+            <div class="fi-section-content p-6">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;">
+                    <div>
+                        <div style="font-weight:600;font-size:1rem;color:var(--gray-900);" x-text="state ? (state.message || 'Updating…') : 'Starting…'"></div>
+                        <div style="font-size:0.825rem;color:var(--gray-500);margin-top:0.15rem;">
+                            <span x-text="state && state.step ? 'Step: ' + state.step.replace(/_/g, ' ') : ''"></span>
+                        </div>
+                    </div>
+                    <div style="font-weight:700;font-size:1.1rem;color:var(--primary-600);font-variant-numeric:tabular-nums;" x-text="(state && state.percent !== undefined ? state.percent : 0) + '%'"></div>
+                </div>
 
-        <div style="height:0.65rem;background:#1e293b;border-radius:9999px;overflow:hidden;">
-            <div
-                style="height:100%;background:linear-gradient(90deg,#0ea5e9,#22d3ee);transition:width 0.4s ease;"
-                :style="'width: ' + (state && state.percent !== undefined ? state.percent : 0) + '%;'"
-            ></div>
-        </div>
+                {{-- Bar with both a fill (driven by percent) AND an
+                     overlaid moving stripe (driven by CSS animation),
+                     so even between step updates there's visible
+                     motion. --}}
+                <div style="position:relative;height:0.625rem;background:var(--gray-100);border-radius:9999px;overflow:hidden;">
+                    <div
+                        :style="{ width: ((state && state.percent !== undefined ? state.percent : 0)) + '%' }"
+                        style="height:100%;background:var(--primary-500);transition:width 600ms cubic-bezier(0.22, 1, 0.36, 1);position:relative;"
+                    ></div>
+                    {{-- Animated diagonal stripe overlay — visible only
+                         while running so it doesn't keep moving on
+                         success/failure. --}}
+                    <div
+                        x-show="state && state.status === 'running'"
+                        style="position:absolute;inset:0;background-image:linear-gradient(135deg,rgba(255,255,255,0.18) 25%,transparent 25%,transparent 50%,rgba(255,255,255,0.18) 50%,rgba(255,255,255,0.18) 75%,transparent 75%,transparent);background-size:1.25rem 1.25rem;animation:capnms-progress-stripe 0.9s linear infinite;mix-blend-mode:overlay;pointer-events:none;"
+                    ></div>
+                </div>
 
-        <div style="margin-top:0.85rem;font-size:0.8rem;color:#94a3b8;">
-            <span x-text="state && state.step ? 'Step: ' + state.step : ''"></span>
-            <template x-if="state && state.status === 'complete'">
-                <span style="color:#22c55e;font-weight:700;">  ✓ Done — reloading…</span>
-            </template>
-            <template x-if="state && state.status === 'failed'">
-                <span>
-                    <span style="color:#ef4444;font-weight:700;">  ✕ Failed.</span>
-                    <template x-for="err in (state.errors || [])">
-                        <div style="margin-top:0.35rem;color:#fecaca;" x-text="'• ' + err"></div>
+                <div style="margin-top:0.85rem;font-size:0.825rem;color:var(--gray-500);">
+                    <template x-if="state && state.status === 'complete'">
+                        <span style="color:var(--success-600);font-weight:600;">  ✓ Done — reloading…</span>
                     </template>
-                </span>
-            </template>
-            <template x-if="!state || state.status === 'running' || state.status === 'idle'">
-                <span style="color:#94a3b8;">Don't close this tab. The apply runs in the background; this page will refresh when it finishes.</span>
-            </template>
+                    <template x-if="state && state.status === 'failed'">
+                        <div>
+                            <div style="color:var(--danger-600);font-weight:600;margin-bottom:0.25rem;">  ✕ Update failed</div>
+                            <template x-for="err in (state.errors || [])">
+                                <div style="color:var(--danger-700);" x-text="'• ' + err"></div>
+                            </template>
+                        </div>
+                    </template>
+                    <template x-if="!state || state.status === 'running'">
+                        <span>Don't close this tab. The apply runs in the background; this page will refresh when it finishes.</span>
+                    </template>
+                </div>
+            </div>
         </div>
     </div>
+
+    <style>
+        @keyframes capnms-progress-stripe {
+            from { background-position: 0 0; }
+            to   { background-position: 1.25rem 0; }
+        }
+    </style>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-bottom:2rem;">
         <div style="padding:1rem;border:1px solid var(--gray-200, #e5e7eb);border-radius:0.5rem;">
@@ -121,6 +144,15 @@
     </p>
     <form wire:submit="applyUpload">
         {{ $this->form }}
+
+        <div style="margin-top:1rem;">
+            <x-filament::button type="submit" wire:loading.attr="disabled" wire:target="applyUpload" color="primary">
+                Apply uploaded files
+            </x-filament::button>
+            <span wire:loading wire:target="applyUpload" style="margin-left:0.75rem;font-size:0.85rem;color:var(--gray-500);">
+                Starting…
+            </span>
+        </div>
     </form>
 
     <p style="margin-top:2rem;font-size:0.85rem;color:var(--gray-500, #6b7280);">

@@ -85,11 +85,10 @@ class Updates extends Page
                 ->color('primary')
                 ->visible(fn () => $allowed && $this->manifestEntry !== null)
                 ->action(fn () => $this->applyManifest()),
-            Action::make('applyUpload')
-                ->label('Apply uploaded files')
-                ->color('primary')
-                ->visible(fn () => $allowed)
-                ->action(fn () => $this->applyUpload()),
+            // The air-gapped "Apply uploaded files" button lives
+            // inside the Air-gapped install section in the page body,
+            // not in the header — keeps the form + its submit
+            // button visually together.
         ];
     }
 

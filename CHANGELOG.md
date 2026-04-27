@@ -1,4 +1,12 @@
-Live-progress UI for in-flight updates — the apply now writes a JSON progress file at every step (download / verify / snapshot / extract / merge / migrate) and the Filament Updates page polls it via Alpine.js, so customers see a real progress bar + step name instead of a frozen "applying" spinner. Filament header actions now closure-bound so they actually fire.
+Updates page UX overhaul — progress bar now styled to match the Filament panel, animates with a moving stripe so pauses between steps still show motion, only visible during an apply (no lingering "complete" card), and the air-gapped "Apply uploaded files" submit button moved next to its form. The apply pipeline also force-clears compiled view caches so future upgrades never get bitten by stale-cache 500s.
+
+## 1.0.4-dev
+
+- Updates page progress card restyled to Filament theme (`var(--primary-*)`, `var(--gray-*)`, fi-section wrapper).
+- Progress bar uses Alpine `:style="{ width }"` object syntax (string form was replacing the whole style attr); added a CSS-keyframe diagonal stripe so the bar shows motion even between percent updates.
+- Card visibility tightened: status=running OR finished within last 30s. No more lingering "complete" card on subsequent page loads.
+- "Apply uploaded files" submit button moved out of the header actions and into the air-gapped install form so the form + its action are visually together.
+- `UpdateService::applyZip` now `File::cleanDirectory()`s the compiled-view + cache-data dirs and `touch()`es every freshly-merged blade/php file. Resets opcache when available. Stale-view 500s after upgrade are gone.
 
 ## 1.0.3-dev
 

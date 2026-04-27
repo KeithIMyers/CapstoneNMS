@@ -260,7 +260,42 @@ class UpdateService
             Artisan::call('config:clear');
             Artisan::call('view:clear');
             Artisan::call('route:clear');
+
+            // Belt-and-braces: blow away the compiled view + cache
+            // dirs at the filesystem level. view:clear works by
+            // path-hashed filename + mtime; rsync + scp preserve
+            // mtimes, so a freshly-merged blade file can match an
+            // older compiled view's mtime and Laravel happily reuses
+            // the stale compile. Force-deleting the directories
+            // sidesteps the comparison entirely.
+            File::cleanDirectory(storage_path('framework/views'));
+            File::cleanDirectory(storage_path('framework/cache/data'));
+
+            // Touch every freshly-merged blade file so opcache (and
+            // any other path-mtime cache) sees them as new.
+            $base = base_path();
+            foreach (['resources/views', 'app'] as $treeRel) {
+                $tree = $base . '/' . $treeRel;
+                if (! is_dir($tree)) continue;
+                $now = time();
+                $iter = new \RecursiveIteratorIterator(
+                    new \RecursiveDirectoryIterator($tree, \FilesystemIterator::SKIP_DOTS),
+                );
+                foreach ($iter as $f) {
+                    if ($f->isFile() && in_array($f->getExtension(), ['php', 'blade.php'], true)) {
+                        @touch($f->getPathname(), $now);
+                    }
+                }
+            }
+
             Artisan::call('config:cache');
+
+            // Tell opcache to reset, if available — otherwise the
+            // newly-merged PHP files won't be re-read by the running
+            // FastCGI workers.
+            if (function_exists('opcache_reset')) {
+                @opcache_reset();
+            }
         } catch (\Throwable $e) {
             $err = ['Post-install commands failed: ' . $e->getMessage()];
             $progress->fail($err);
