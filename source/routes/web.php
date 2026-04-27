@@ -175,11 +175,36 @@ Route::group(['namespace' => 'App\Http\Controllers'], function () {
         ->name('image.proxy');
 
     // JSON polling endpoint the Filament Updates page uses to render
-    // live progress while an apply is in flight. Lives outside the
-    // Filament Livewire surface so the polling worker doesn't share
-    // a PHP-FPM thread with the long-running apply request.
+    // live progress while an apply is in flight. Three middleware
+    // exclusions:
+    //
+    //   StartSession + ShareErrorsFromSession + EncryptCookies:
+    //     Laravel's file session driver takes an exclusive lock for
+    //     the request lifetime. An in-flight 30-60s apply request
+    //     would starve every concurrent poll, freezing the UI at its
+    //     last rendered percent until the apply finally releases.
+    //
+    //   PreventRequestForgery (Laravel 12's CSRF middleware):
+    //     Calls $request->session() to set the XSRF cookie — without
+    //     a session it throws "Session store not set". Cascading
+    //     effect of dropping StartSession.
+    //
+    //   CaptureReferralCode + CacheGuestResponses: not relevant for
+    //     a JSON endpoint and would just slow the poll loop.
+    //
+    // The endpoint reads + emits a small JSON file. Information
+    // exposure: an in-flight step name + percent + version. No
+    // license, no secrets, no customer PII.
     Route::get('capstone-updater/progress', 'UpdaterController@progress')
-        ->middleware('auth')
+        ->withoutMiddleware([
+            \Illuminate\Cookie\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \Illuminate\Session\Middleware\StartSession::class,
+            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+            \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+            \App\Http\Middleware\CaptureReferralCode::class,
+            \App\Http\Middleware\CacheGuestResponses::class,
+        ])
         ->name('updater.progress');
 
     // Offline fallback rendered by the service worker when both network

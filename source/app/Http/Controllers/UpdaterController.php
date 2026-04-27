@@ -7,13 +7,21 @@ use Illuminate\Http\JsonResponse;
 
 /**
  * Lightweight JSON endpoint the Filament Updates page polls while
- * an apply is in flight. Lives outside the Filament Livewire surface
- * so the polling doesn't have to share a worker with the long-
- * running apply request — different PHP-FPM workers handle each.
+ * an apply is in flight. Designed to be cheap AND non-blocking:
  *
- * Auth: routed inside the admin auth chain (web group + Authenticate
- * + EnforceLicense) so only an admin who can see the Updates page
- * can poll it.
+ *   - No session middleware. Laravel's file-driver session takes an
+ *     exclusive lock during request handling. An in-flight 30-60s
+ *     apply request would otherwise starve every concurrent poll
+ *     for the entire duration, leaving the UI frozen at its last-
+ *     rendered percent until the apply finally releases the lock.
+ *
+ *   - No `auth` middleware. We don't have a `login` named route in
+ *     this app, so the default Authenticate redirect-on-fail throws
+ *     "Route [login] not defined" → 500 HTML, which the polling
+ *     fetch can't parse and the UI hangs.
+ *
+ * Information exposure is minimal: an in-flight step name + percent
+ * + version. No license, no secrets, no customer PII.
  */
 class UpdaterController extends Controller
 {
