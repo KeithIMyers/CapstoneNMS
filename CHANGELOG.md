@@ -1,4 +1,9 @@
-Updates page polish — Alpine progress card polls the JSON endpoint continuously (3s idle / 1.2s active) so the UI lights up the moment the action writes its first progress entry, instead of waiting on a Livewire dispatch that's buffered into the apply's response. Status card always shows the latest published version. Download + install button hides when you're already on it.
+Updates page progress card no longer leaves a stale "100% Done" frozen on screen after a navigate-away / navigate-back cycle. The Alpine poll's idle branch now always hides + clears state, and the JSON endpoint auto-cleans terminal progress entries after 60 seconds.
+
+## 1.0.6-dev
+
+- Alpine poll's idle branch always hides the card + clears `state` (was leaving stale percent/step values behind because it consulted the page-render-time `seed.visible` instead of the current poll result).
+- `UpdaterController::progress` deletes terminal `complete`/`failed` entries that have been around for over a minute. Prevents the next page render from showing a stale "100% Done" forever.
 
 ## 1.0.5-dev
 
