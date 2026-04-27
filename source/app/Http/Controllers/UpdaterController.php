@@ -20,6 +20,20 @@ class UpdaterController extends Controller
     public function progress(ProgressTracker $tracker): JsonResponse
     {
         $state = $tracker->read();
+
+        // Auto-clean stale terminal states. Once a complete/failed
+        // entry has been around for over a minute it's no longer
+        // useful, and leaving it on disk lets the in-page progress
+        // card show a stale "100% Done" the next time the admin
+        // navigates to /admin/updates.
+        if ($state !== null
+            && in_array($state['status'] ?? null, ['complete', 'failed'], true)
+            && isset($state['finished_at'])
+            && (time() - (int) $state['finished_at']) > 60) {
+            $tracker->clear();
+            $state = null;
+        }
+
         if ($state === null) {
             return response()->json(['status' => 'idle'])->header('Cache-Control', 'no-store');
         }

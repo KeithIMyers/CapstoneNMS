@@ -223,10 +223,16 @@
                             this.visible = true;
                             this.schedule(IDLE_MS);
                         } else {
-                            // status=idle — no progress file. Hide the
-                            // card unless the PHP-side seed already
-                            // decided we're inside a post-finish window.
-                            if (! seed.visible) this.visible = false;
+                            // status=idle (no progress file). Always
+                            // hide + clear local state. The Alpine
+                            // seed is frozen at page-render time, so
+                            // a stale "visible=true" from a previous
+                            // mount would otherwise persist across
+                            // navigations and keep showing the old
+                            // bar after the apply has finished and
+                            // the file has been cleaned up.
+                            this.visible = false;
+                            this.state = null;
                             this.schedule(IDLE_MS);
                         }
                     } catch (e) { /* swallow transient network errors */ }
