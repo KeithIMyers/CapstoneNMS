@@ -95,15 +95,30 @@ class Updates extends Page
     public function checkForUpdates(): void
     {
         $svc = app(UpdateService::class);
-        $entry = $svc->availableUpdate();
-        if ($entry === null) {
-            Notification::make()->title('You\'re up to date')->success()->send();
+
+        // Always populate the latest-known release from the manifest
+        // (regardless of whether it's newer than us) so the "Latest
+        // available" card shows the published version. Only the
+        // Download + install button gates on availableUpdate() — that
+        // returns null when manifest.latest <= currentVersion.
+        $latestEntry = $svc->latestEntry();
+        if ($latestEntry !== null) {
+            $this->manifestEntry = $latestEntry;
+        }
+
+        $newer = $svc->availableUpdate();
+        if ($newer === null) {
+            Notification::make()
+                ->title('You\'re up to date')
+                ->body('Running the latest published version (' . $svc->currentVersion() . ').')
+                ->success()
+                ->send();
             return;
         }
-        $this->manifestEntry = $entry;
+
         Notification::make()
-            ->title('Update available: ' . ($entry['version'] ?? '?'))
-            ->body((string) ($entry['notes'] ?? ''))
+            ->title('Update available: ' . ($newer['version'] ?? '?'))
+            ->body((string) ($newer['notes'] ?? ''))
             ->success()
             ->send();
     }

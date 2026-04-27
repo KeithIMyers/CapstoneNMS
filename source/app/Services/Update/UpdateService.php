@@ -91,14 +91,26 @@ class UpdateService
 
     public function availableUpdate(): ?array
     {
-        $manifest = $this->fetchManifest();
-        if (! $manifest) return null;
-
-        $latest = (string) ($manifest['latest'] ?? '');
+        $entry = $this->latestEntry();
+        if ($entry === null) return null;
+        $latest = (string) ($entry['version'] ?? '');
         if ($latest === '' || ! version_compare($latest, $this->currentVersion(), '>')) {
             return null;
         }
+        return $entry;
+    }
 
+    /**
+     * Return the manifest's "latest" release entry, regardless of
+     * whether it's newer than the install. Used by the Updates page
+     * to show the published version even when we're already current.
+     */
+    public function latestEntry(): ?array
+    {
+        $manifest = $this->fetchManifest();
+        if (! $manifest) return null;
+        $latest = (string) ($manifest['latest'] ?? '');
+        if ($latest === '') return null;
         foreach ((array) ($manifest['releases'] ?? []) as $entry) {
             if (($entry['version'] ?? null) === $latest) return $entry;
         }
