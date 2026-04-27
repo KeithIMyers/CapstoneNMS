@@ -1,4 +1,8 @@
-Updates page progress card no longer leaves a stale "100% Done" frozen on screen after a navigate-away / navigate-back cycle. The Alpine poll's idle branch now always hides + clears state, and the JSON endpoint auto-cleans terminal progress entries after 60 seconds.
+Test bump for the OTA flow — verifies the always-hide-on-idle Alpine fix from 1.0.6 actually ships through the updater.
+
+## 1.0.7-dev
+
+- Version bump only. Use this release to confirm the upgrade UI renders cleanly through download → verify → snapshot → extract → merge → migrate → done, then auto-reloads to reveal the new version, with no stale progress card on subsequent page visits.
 
 ## 1.0.6-dev
 

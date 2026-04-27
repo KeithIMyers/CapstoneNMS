@@ -19,7 +19,7 @@ return [
 
     'product_name'    => 'CapstoneNMS',
     'product_url'     => 'https://capstonenms.com',
-    'product_version' => '1.0.6-dev',
+    'product_version' => '1.0.7-dev',
 
     /*
     |---------------------------------------------------------------
